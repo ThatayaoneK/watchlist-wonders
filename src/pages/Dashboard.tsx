@@ -30,16 +30,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ToastAction } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -52,7 +43,6 @@ const Dashboard = () => {
   const { isSearchOpen, openSearch, closeSearch } = useSearchShortcut();
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
   const [selectedBookmark, setSelectedBookmark] = useState<Bookmark | null>(null);
   const [selectedPlanId, setSelectedPlanId] = useState("");
   
@@ -177,16 +167,40 @@ const Dashboard = () => {
     },
   });
 
+  // Undo delete — recreate the bookmark with its original data
+  const handleUndoDelete = (bookmark: Bookmark) => {
+    bookmarkService.createBookmark({
+      title: bookmark.title,
+      type: bookmark.type,
+      provider: bookmark.provider,
+      source_url: bookmark.source_url,
+      canonical_url: bookmark.canonical_url,
+      platform_label: bookmark.platform_label,
+      status: bookmark.status,
+      runtime_minutes: bookmark.runtime_minutes,
+      release_year: bookmark.release_year,
+      poster_url: bookmark.poster_url,
+      backdrop_url: bookmark.backdrop_url,
+      tags: bookmark.tags,
+      mood_tags: bookmark.mood_tags,
+      notes: bookmark.notes,
+      metadata: bookmark.metadata,
+    }).then(() => queryClient.invalidateQueries({ queryKey: ['bookmarks'] }));
+  };
+
   // Delete mutation
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => bookmarkService.deleteBookmark(id),
-    onSuccess: () => {
+    mutationFn: (bookmark: Bookmark) => bookmarkService.deleteBookmark(bookmark.id),
+    onSuccess: (_, bookmark) => {
       queryClient.invalidateQueries({ queryKey: ['bookmarks'] });
-      setDeleteOpen(false);
-      setSelectedBookmark(null);
       toast({
         title: "Deleted",
-        description: "Bookmark removed from your list.",
+        description: `"${bookmark.title}" removed.`,
+        action: (
+          <ToastAction altText="Undo" onClick={() => handleUndoDelete(bookmark)}>
+            Undo
+          </ToastAction>
+        ),
       });
     },
     onError: (error: any) => {
@@ -237,13 +251,7 @@ const Dashboard = () => {
   };
 
   const handleDelete = (bookmark: Bookmark) => {
-    setSelectedBookmark(bookmark);
-    setDeleteOpen(true);
-  };
-
-  const handleDeleteConfirm = () => {
-    if (!selectedBookmark) return;
-    deleteMutation.mutate(selectedBookmark.id);
+    deleteMutation.mutate(bookmark);
   };
 
   const handleAddToPlan = (bookmark: Bookmark) => {
@@ -358,6 +366,14 @@ const Dashboard = () => {
     advancedFilters.runtimeMin !== null ||
     advancedFilters.runtimeMax !== null;
 
+  const totalActiveFilterCount =
+    (filterType !== "all" ? 1 : 0) +
+    (filterStatus !== "all" ? 1 : 0) +
+    advancedFilters.providers.length +
+    advancedFilters.moods.length +
+    (advancedFilters.runtimeMin !== null ? 1 : 0) +
+    (advancedFilters.runtimeMax !== null ? 1 : 0);
+
   // Group bookmarks (use filtered if filters active, otherwise use all)
   const displayBookmarks = hasActiveFilters ? filteredBookmarks : bookmarks;
   const continueWatching = displayBookmarks.filter((b) => b.status === "watching");
@@ -458,12 +474,26 @@ const Dashboard = () => {
                   className="h-8 gap-1 text-xs"
                 >
                   Filters
-                  {(advancedFilters.providers.length + advancedFilters.moods.length + (advancedFilters.runtimeMin !== null ? 1 : 0) + (advancedFilters.runtimeMax !== null ? 1 : 0)) > 0 && (
+                  {totalActiveFilterCount > 0 && (
                     <span className="bg-primary text-primary-foreground rounded-full w-4 h-4 text-[10px] flex items-center justify-center">
-                      {advancedFilters.providers.length + advancedFilters.moods.length + (advancedFilters.runtimeMin !== null ? 1 : 0) + (advancedFilters.runtimeMax !== null ? 1 : 0)}
+                      {totalActiveFilterCount}
                     </span>
                   )}
                 </Button>
+                {hasActiveFilters && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-xs text-muted-foreground hover:text-foreground px-2"
+                    onClick={() => {
+                      setFilterType("all");
+                      setFilterStatus("all");
+                      setAdvancedFilters({ providers: [], moods: [], runtimeMin: null, runtimeMax: null });
+                    }}
+                  >
+                    Clear all
+                  </Button>
+                )}
                 <Button
                   variant={selectMode ? "secondary" : "outline"}
                   size="sm"
@@ -729,26 +759,6 @@ const Dashboard = () => {
         onClear={() => { setSelectedIds(new Set()); setSelectMode(false); }}
       />
 
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete "{selectedBookmark?.title}"?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete this bookmark from your watchlist.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteConfirm}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleteMutation.isPending ? "Deleting..." : "Delete"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 };

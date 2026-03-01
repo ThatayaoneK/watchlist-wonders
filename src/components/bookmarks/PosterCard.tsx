@@ -260,6 +260,61 @@ export function PosterCard({
             )}
           />
 
+          {/* Mobile persistent action button — always visible, no hover required */}
+          {isMobile && !isSelectable && (
+            <div className="absolute bottom-1.5 right-1.5 z-20">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    className="h-7 w-7 rounded-full bg-background/80 backdrop-blur-sm"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                    aria-label="More options"
+                  >
+                    <MoreHorizontal className="w-3.5 h-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  {bookmark.status !== "watching" && (
+                    <DropdownMenuItem onClick={onSetWatching}>
+                      <Eye className="w-4 h-4 mr-2" />
+                      Set as Watching
+                    </DropdownMenuItem>
+                  )}
+                  {bookmark.status === "done" ? (
+                    <DropdownMenuItem onClick={onUndoDone}>
+                      <Undo2 className="w-4 h-4 mr-2" />
+                      Move to Backlog
+                    </DropdownMenuItem>
+                  ) : (
+                    <DropdownMenuItem onClick={onMarkDone}>
+                      <Check className="w-4 h-4 mr-2" />
+                      Mark as Done
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem onClick={onAddToPlan}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add to Plan
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handlePlay}>
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    Open Source
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={onDelete}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )}
+
           {/* Hover Actions */}
           {!isSelectable && (
             <div
