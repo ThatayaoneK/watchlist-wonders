@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -142,11 +142,28 @@ const NewBookmark = () => {
     },
   });
 
+  // Auto-trigger fetch when a valid URL is pasted
+  const autoFetchedUrlRef = useRef<string>("");
+  useEffect(() => {
+    const trimmed = url.trim();
+    if (!trimmed || step !== "paste" || isEnriching) return;
+    try { new URL(trimmed); } catch { return; }
+    if (trimmed === autoFetchedUrlRef.current) return;
+    const timer = setTimeout(() => {
+      if (autoFetchedUrlRef.current === trimmed) return; // Re-check before calling
+      autoFetchedUrlRef.current = trimmed;
+      handleFetch();
+    }, 600);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [url, step, isEnriching]);
+
   // ── Step 1: Fetch enrichment ─────────────────────────────────────
   const handleFetch = async () => {
     const trimmed = url.trim();
     if (!trimmed) return;
 
+    autoFetchedUrlRef.current = trimmed;
     setEnrichError(null);
     const enrichUrl = import.meta.env.VITE_ENRICH_URL;
 

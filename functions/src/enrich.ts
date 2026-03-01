@@ -193,6 +193,88 @@ async function enrichViaOG(url: string, provider: string): Promise<EnrichRespons
   };
 }
 
+// --- IMDb ---
+
+function extractImdbId(url: string): string | null {
+  const match = url.match(/\/title\/(tt\d+)/i);
+  return match ? match[1] : null;
+}
+
+async function enrichIMDb(url: string): Promise<EnrichResponse> {
+  const apiKey = tmdbApiKey.value();
+  if (!apiKey) return enrichViaOG(url, 'imdb');
+
+  const imdbId = extractImdbId(url);
+  if (!imdbId) return enrichViaOG(url, 'imdb');
+
+  try {
+    const res = await fetch(
+      `https://api.themoviedb.org/3/find/${imdbId}?external_source=imdb_id&api_key=${apiKey}`
+    );
+    if (!res.ok) return enrichViaOG(url, 'imdb');
+
+    const data = (await res.json()) as any;
+    const isTV = !!data.tv_results?.[0];
+    const result = isTV ? data.tv_results[0] : data.movie_results?.[0];
+    if (!result) return enrichViaOG(url, 'imdb');
+
+    const rawDate = isTV ? result.first_air_date : result.release_date;
+    let runtimeMinutes: number | undefined;
+    try {
+      const mediaType = isTV ? 'tv' : 'movie';
+      const detailRes = await fetch(
+        `https://api.themoviedb.org/3/${mediaType}/${result.id}?api_key=${apiKey}`
+      );
+      if (detailRes.ok) {
+        const detail = (await detailRes.json()) as any;
+        runtimeMinutes = isTV ? detail.episode_run_time?.[0] : detail.runtime ?? undefined;
+      }
+    } catch {}
+
+    return {
+      title: result.title ?? result.name,
+      description: result.overview,
+      posterUrl: result.poster_path ? `https://image.tmdb.org/t/p/w500${result.poster_path}` : undefined,
+      backdropUrl: result.backdrop_path ? `https://image.tmdb.org/t/p/original${result.backdrop_path}` : undefined,
+      releaseYear: rawDate ? parseInt(rawDate.slice(0, 4), 10) || undefined : undefined,
+      mediaType: isTV ? 'tv' : 'movie',
+      tmdbId: result.id,
+      runtimeMinutes,
+      provider: 'imdb',
+    };
+  } catch (error) {
+    logger.error('IMDb enrichment error:', error);
+    return enrichViaOG(url, 'imdb');
+  }
+}
+
+// --- Letterboxd ---
+
+async function enrichLetterboxd(url: string): Promise<EnrichResponse> {
+  try {
+    const match = new URL(url).pathname.match(/^\/film\/([^/]+)/);
+    if (!match) return enrichViaOG(url, 'letterboxd');
+    const title = match[1].replace(/-/g, ' ');
+    const tmdb = await enrichTMDB(title);
+    if (tmdb.title) return { ...tmdb, provider: 'letterboxd' };
+  } catch {}
+  return enrichViaOG(url, 'letterboxd');
+}
+
+// --- Rotten Tomatoes ---
+
+async function enrichRottenTomatoes(url: string): Promise<EnrichResponse> {
+  try {
+    const pathname = new URL(url).pathname;
+    const match = pathname.match(/^\/(?:m|tv)\/([^/]+)/);
+    if (!match) return enrichViaOG(url, 'rottentomatoes');
+    const title = match[1].replace(/[_-]/g, ' ');
+    const tmdb = await enrichTMDB(title);
+    if (tmdb.title) return { ...tmdb, provider: 'rottentomatoes' };
+  } catch {}
+  return enrichViaOG(url, 'rottentomatoes');
+}
+
 // --- Reddit ---
 
 async function enrichReddit(url: string): Promise<EnrichResponse> {
@@ -289,12 +371,18 @@ export const enrich = onCall(
         case 'reddit':
           result = await enrichReddit(url);
           break;
+        case 'imdb':
+          result = await enrichIMDb(url);
+          break;
+        case 'letterboxd':
+          result = await enrichLetterboxd(url);
+          break;
+        case 'rottentomatoes':
+          result = await enrichRottenTomatoes(url);
+          break;
         case 'instagram':
         case 'facebook':
         case 'netflix':
-        case 'letterboxd':
-        case 'rottentomatoes':
-        case 'imdb':
         case 'generic':
           result = await enrichViaOG(url, provider);
           break;
