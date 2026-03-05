@@ -174,23 +174,53 @@ async function fetchOpenGraph(url: string): Promise<Record<string, string>> {
   }
 }
 
+// --- Microlink (headless browser fallback) ---
+
+async function enrichWithMicrolink(url: string): Promise<Partial<EnrichResponse>> {
+  try {
+    const endpoint = `https://api.microlink.io?url=${encodeURIComponent(url)}&meta=true`;
+    const res = await fetch(endpoint, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return {};
+    const json = (await res.json()) as any;
+    if (json.status !== 'success' || !json.data?.title) return {};
+    const d = json.data;
+    const year = d.date ? new Date(d.date).getFullYear() : undefined;
+    logger.info('[microlink] enriched:', url, d.title);
+    return {
+      title: d.title ?? undefined,
+      description: d.description ?? undefined,
+      posterUrl: d.image?.url ?? undefined,
+      releaseYear: year || undefined,
+    };
+  } catch (err) {
+    logger.warn('[microlink] failed for', url, err);
+    return {};
+  }
+}
+
 async function enrichViaOG(url: string, provider: string): Promise<EnrichResponse> {
   const og = await fetchOpenGraph(url);
-  if (!og['title']) return { provider };
 
-  const cleaned = cleanTitleForTMDB(og['title']);
-  const tmdb = await enrichTMDB(cleaned);
+  if (og['title']) {
+    const cleaned = cleanTitleForTMDB(og['title']);
+    const tmdb = await enrichTMDB(cleaned);
+    return {
+      title: tmdb.title ?? og['title'],
+      description: tmdb.description ?? og['description'],
+      posterUrl: tmdb.posterUrl ?? og['image'],
+      backdropUrl: tmdb.backdropUrl,
+      releaseYear: tmdb.releaseYear,
+      mediaType: tmdb.mediaType,
+      tmdbId: tmdb.tmdbId,
+      provider,
+    };
+  }
 
-  return {
-    title: tmdb.title ?? og['title'],
-    description: tmdb.description ?? og['description'],
-    posterUrl: tmdb.posterUrl ?? og['image'],
-    backdropUrl: tmdb.backdropUrl,
-    releaseYear: tmdb.releaseYear,
-    mediaType: tmdb.mediaType,
-    tmdbId: tmdb.tmdbId,
-    provider,
-  };
+  // OG scraping failed (blocked or JS-rendered) — try Microlink headless browser
+  const ml = await enrichWithMicrolink(url);
+  if (ml.title) return { ...ml, provider };
+
+  return { provider };
 }
 
 // --- IMDb ---

@@ -13,7 +13,10 @@
       "Bash(set +H)",
       "Bash(where:*)",
       "Bash(ls .env*)",
-      "Bash(ls c:/Users/Kekab/wonders/watchlist-wonders/*.rules)"
+      "Bash(ls ./*.rules)",
+      "Bash(grep -r \"queryKey\\\\|queryFn\" ./src/pages/*.tsx)",
+      "WebFetch(domain:microlink.io)",
+      "WebFetch(domain:iframely.com)"
     ]
   }
 }

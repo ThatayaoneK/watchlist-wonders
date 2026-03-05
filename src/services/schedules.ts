@@ -10,6 +10,7 @@ import {
   where,
   orderBy,
   limit,
+  documentId,
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { Schedule, Bookmark } from '@/types/database';
@@ -26,13 +27,28 @@ function schedulesCol(uid: string) {
   return collection(db, 'users', uid, 'schedules');
 }
 
-async function attachBookmark(uid: string, schedule: Schedule): Promise<ScheduleWithBookmark> {
-  const bookmarkSnap = await getDoc(doc(db, 'users', uid, 'bookmarks', schedule.bookmark_id));
-  if (!bookmarkSnap.exists()) {
-    throw new Error(`Bookmark ${schedule.bookmark_id} not found for schedule`);
+async function batchAttachBookmarks(uid: string, schedules: Schedule[]): Promise<ScheduleWithBookmark[]> {
+  if (schedules.length === 0) return [];
+  const bookmarkIds = [...new Set(schedules.map((s) => s.bookmark_id))];
+  const CHUNK = 30;
+  const bookmarkMap = new Map<string, Bookmark>();
+  for (let i = 0; i < bookmarkIds.length; i += CHUNK) {
+    const chunk = bookmarkIds.slice(i, i + CHUNK);
+    const bq = query(collection(db, 'users', uid, 'bookmarks'), where(documentId(), 'in', chunk));
+    const bSnap = await getDocs(bq);
+    bSnap.docs.forEach((d) => {
+      bookmarkMap.set(d.id, { id: d.id, ...d.data() } as Bookmark);
+    });
   }
-  const bookmark = { id: bookmarkSnap.id, ...bookmarkSnap.data() } as Bookmark;
-  return { ...schedule, bookmarks: bookmark };
+  return schedules
+    .filter((s) => {
+      if (bookmarkMap.has(s.bookmark_id)) return true;
+      console.warn(
+        `Schedule ${s.id} skipped: associated bookmark ${s.bookmark_id} not found`,
+      );
+      return false;
+    })
+    .map((s) => ({ ...s, bookmarks: bookmarkMap.get(s.bookmark_id)! }));
 }
 
 function docToSchedule(snap: any): Schedule {
@@ -47,8 +63,7 @@ export const scheduleService = {
     const uid = getUid();
     const q = query(schedulesCol(uid), orderBy('scheduled_for', 'asc'));
     const snap = await getDocs(q);
-    const schedules = snap.docs.map(docToSchedule);
-    return Promise.all(schedules.map((s) => attachBookmark(uid, s)));
+    return batchAttachBookmarks(uid, snap.docs.map(docToSchedule));
   },
 
   /**
@@ -65,8 +80,7 @@ export const scheduleService = {
       limit(lim),
     );
     const snap = await getDocs(q);
-    const schedules = snap.docs.map(docToSchedule);
-    return Promise.all(schedules.map((s) => attachBookmark(uid, s)));
+    return batchAttachBookmarks(uid, snap.docs.map(docToSchedule));
   },
 
   /**
@@ -76,8 +90,9 @@ export const scheduleService = {
     const uid = getUid();
     const snap = await getDoc(doc(db, 'users', uid, 'schedules', id));
     if (!snap.exists()) throw new Error('Schedule not found');
-    const schedule = docToSchedule(snap);
-    return attachBookmark(uid, schedule);
+    const [result] = await batchAttachBookmarks(uid, [docToSchedule(snap)]);
+    if (!result) throw new Error(`Bookmark not found for schedule ${id}`);
+    return result;
   },
 
   /**
@@ -163,8 +178,7 @@ export const scheduleService = {
       orderBy('scheduled_for', 'asc'),
     );
     const snap = await getDocs(q);
-    const schedules = snap.docs.map(docToSchedule);
-    return Promise.all(schedules.map((s) => attachBookmark(uid, s)));
+    return batchAttachBookmarks(uid, snap.docs.map(docToSchedule));
   },
 
   /**
@@ -185,7 +199,6 @@ export const scheduleService = {
       orderBy('scheduled_for', 'asc'),
     );
     const snap = await getDocs(q);
-    const schedules = snap.docs.map(docToSchedule);
-    return Promise.all(schedules.map((s) => attachBookmark(uid, s)));
+    return batchAttachBookmarks(uid, snap.docs.map(docToSchedule));
   },
 };

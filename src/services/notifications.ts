@@ -1,16 +1,17 @@
 import {
   collection,
-  doc,
   updateDoc,
   deleteDoc,
   getDocs,
   getDoc,
+  doc,
   query,
   where,
   orderBy,
   limit,
   onSnapshot,
   writeBatch,
+  documentId,
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { Notification, Bookmark } from '@/types/database';
@@ -27,17 +28,32 @@ function notificationsCol(uid: string) {
   return collection(db, 'users', uid, 'notifications');
 }
 
-async function attachBookmark(uid: string, notif: Notification): Promise<NotificationWithBookmark> {
-  if (!notif.bookmark_id) return notif;
-  try {
-    const snap = await getDoc(doc(db, 'users', uid, 'bookmarks', notif.bookmark_id));
-    if (snap.exists()) {
-      return { ...notif, bookmarks: { id: snap.id, ...snap.data() } as Bookmark };
+async function batchAttachBookmarks(uid: string, notifications: Notification[]): Promise<NotificationWithBookmark[]> {
+  const ids = [...new Set(notifications.map((n) => n.bookmark_id).filter(Boolean))] as string[];
+  if (ids.length === 0) return notifications;
+  const CHUNK = 30;
+  const bookmarkMap = new Map<string, Bookmark>();
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const chunk = ids.slice(i, i + CHUNK);
+    try {
+      const bq = query(collection(db, 'users', uid, 'bookmarks'), where(documentId(), 'in', chunk));
+      const bSnap = await getDocs(bq);
+      bSnap.docs.forEach((d) => {
+        bookmarkMap.set(d.id, { id: d.id, ...d.data() } as Bookmark);
+      });
+    } catch (error) {
+      console.error(
+        `Failed to fetch bookmark chunk [${chunk.join(', ')}]:`,
+        error instanceof Error ? error.message : error
+      );
+      // Continue processing remaining chunks; missing bookmarks will be absent from bookmarkMap
     }
-  } catch (err) {
-    console.error('Notification service error', err);
   }
-  return notif;
+  return notifications.map((n) =>
+    n.bookmark_id && bookmarkMap.has(n.bookmark_id)
+      ? { ...n, bookmarks: bookmarkMap.get(n.bookmark_id) }
+      : n,
+  );
 }
 
 function docToNotification(snap: any): Notification {
@@ -52,8 +68,7 @@ export const notificationService = {
     const uid = getUid();
     const q = query(notificationsCol(uid), orderBy('created_at', 'desc'), limit(lim));
     const snap = await getDocs(q);
-    const notifications = snap.docs.map(docToNotification);
-    return Promise.all(notifications.map((n) => attachBookmark(uid, n)));
+    return batchAttachBookmarks(uid, snap.docs.map(docToNotification));
   },
 
   /**
@@ -67,8 +82,7 @@ export const notificationService = {
       orderBy('created_at', 'desc'),
     );
     const snap = await getDocs(q);
-    const notifications = snap.docs.map(docToNotification);
-    return Promise.all(notifications.map((n) => attachBookmark(uid, n)));
+    return batchAttachBookmarks(uid, snap.docs.map(docToNotification));
   },
 
   /**

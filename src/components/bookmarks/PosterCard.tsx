@@ -262,7 +262,7 @@ export function PosterCard({
 
           {/* Mobile persistent action button — always visible, no hover required */}
           {isMobile && !isSelectable && (
-            <div className="absolute bottom-1.5 right-1.5 z-20">
+            <div className="absolute bottom-8 right-1.5 z-20">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -296,6 +296,10 @@ export function PosterCard({
                   <DropdownMenuItem onClick={onAddToPlan}>
                     <Plus className="w-4 h-4 mr-2" />
                     Add to Plan
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleScheduleClick}>
+                    <CalendarPlus className="w-4 h-4 mr-2" />
+                    Quick Schedule
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handlePlay}>

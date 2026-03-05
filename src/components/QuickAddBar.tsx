@@ -8,7 +8,18 @@ import { auth, fbFunctions } from "@/lib/firebase";
 import { httpsCallable } from "firebase/functions";
 import { bookmarkService } from "@/services/bookmarks";
 import { ConfirmMetadataDialog, type ConfirmMetadataPayload } from "@/components/bookmarks/ConfirmMetadataDialog";
-import { enrichWithYouTube, enrichWithTMDB, extractYouTubeVideoId as enrichExtractYT } from "@/services/enrichment";
+import {
+  enrichWithYouTube,
+  enrichWithTMDB,
+  enrichWithInstagram,
+  enrichWithFacebook,
+  enrichWithTwitter,
+  enrichWithTikTok,
+  enrichWithReddit,
+  enrichWithLetterboxd,
+  enrichWithRottenTomatoes,
+  extractYouTubeVideoId as enrichExtractYT,
+} from "@/services/enrichment";
 import { toast } from "sonner";
 import type { Bookmark } from "@/types/database";
 
@@ -134,7 +145,98 @@ export function QuickAddBar({ className }: QuickAddBarProps) {
             console.warn("YouTube enrichment failed:", err);
           }
         }
-      } else if (dp === "netflix" || dp === "imdb" || dp === "instagram" || dp === "facebook" || dp === "x") {
+      } else if (dp === "instagram") {
+        try {
+          const igData = await enrichWithInstagram(trimmed);
+          if (igData) {
+            enrichedData = {
+              title: igData.title || undefined,
+              posterUrl: igData.thumbnail_url || undefined,
+              runtimeMinutes: null,
+            };
+          }
+        } catch (err) {
+          console.warn("Instagram enrichment failed:", err);
+        }
+      } else if (dp === "facebook") {
+        try {
+          const fbData = await enrichWithFacebook(trimmed);
+          if (fbData) {
+            enrichedData = {
+              title: fbData.title || undefined,
+              posterUrl: fbData.thumbnail_url || undefined,
+              runtimeMinutes: null,
+            };
+          }
+        } catch (err) {
+          console.warn("Facebook enrichment failed:", err);
+        }
+      } else if (dp === "x") {
+        try {
+          const twitterData = await enrichWithTwitter(trimmed);
+          if (twitterData) {
+            enrichedData = {
+              title: twitterData.title || undefined,
+              posterUrl: twitterData.thumbnail_url || undefined,
+              runtimeMinutes: null,
+            };
+          }
+        } catch (err) {
+          console.warn("Twitter enrichment failed:", err);
+        }
+      } else if (dp === "tiktok") {
+        try {
+          const ttData = await enrichWithTikTok(trimmed);
+          if (ttData) {
+            enrichedData = {
+              title: ttData.title || undefined,
+              posterUrl: ttData.thumbnail_url || undefined,
+              runtimeMinutes: null,
+            };
+          }
+        } catch (err) {
+          console.warn("TikTok enrichment failed:", err);
+        }
+      } else if (dp === "reddit") {
+        try {
+          const redditData = await enrichWithReddit(trimmed);
+          if (redditData) {
+            enrichedData = {
+              title: redditData.title || undefined,
+              posterUrl: redditData.thumbnail_url || undefined,
+              runtimeMinutes: null,
+            };
+          }
+        } catch (err) {
+          console.warn("Reddit enrichment failed:", err);
+        }
+      } else if (dp === "letterboxd") {
+        try {
+          const lbData = await enrichWithLetterboxd(trimmed);
+          if (lbData) {
+            enrichedData = {
+              title: lbData.title || undefined,
+              posterUrl: lbData.thumbnail_url || undefined,
+              runtimeMinutes: null,
+            };
+          }
+        } catch (err) {
+          console.warn("Letterboxd enrichment failed:", err);
+        }
+      } else if (dp === "rottentomatoes") {
+        try {
+          const rtData = await enrichWithRottenTomatoes(trimmed);
+          if (rtData) {
+            enrichedData = {
+              title: rtData.title || undefined,
+              posterUrl: rtData.thumbnail_url || undefined,
+              runtimeMinutes: null,
+            };
+          }
+        } catch (err) {
+          console.warn("Rotten Tomatoes enrichment failed:", err);
+        }
+      } else if (dp === "netflix" || dp === "imdb") {
         // For other providers, try to extract title from URL or use TMDB
         let possibleTitle: string | undefined;
         
@@ -148,10 +250,6 @@ export function QuickAddBar({ className }: QuickAddBarProps) {
         } else if (dp === "netflix") {
           // Netflix URL patterns: /watch/1234567 or contains show/movie name
           possibleTitle = trimmed.match(/\/watch\/(\d+)|\/[a-z-]+\/([0-9]+)|title=([^&]*)/i)?.[3];
-        } else if (dp === "instagram" || dp === "facebook" || dp === "x") {
-          // Social media - try to extract video title from URL or use domain
-          // These typically don't have extractable titles, so we'll let user fill it in
-          possibleTitle = undefined;
         }
         
         // Try TMDB enrichment if we have a potential title

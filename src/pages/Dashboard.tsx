@@ -62,7 +62,7 @@ const Dashboard = () => {
   const queryClient = useQueryClient();
 
   // Fetch bookmarks
-  const { data: bookmarks = [], isLoading, error } = useQuery({
+  const { data: bookmarks = [], isLoading, error, refetch } = useQuery({
     queryKey: ['bookmarks'],
     queryFn: () => bookmarkService.getBookmarks(),
   });
@@ -71,12 +71,14 @@ const Dashboard = () => {
   const { data: upcomingSchedules = [] } = useQuery({
     queryKey: ['schedules', 'upcoming'],
     queryFn: () => scheduleService.getUpcomingSchedules(8),
+    staleTime: 2 * 60 * 1000,
   });
 
   // Fetch notification count
   const { data: unreadCount = 0 } = useQuery({
     queryKey: ['notifications-count'],
     queryFn: () => notificationService.getUnreadCount(),
+    staleTime: 60 * 1000,
   });
 
   // Fetch watch plans for the "Add to Plan" dialog
@@ -134,36 +136,66 @@ const Dashboard = () => {
   // Mark as done mutation
   const markDoneMutation = useMutation({
     mutationFn: (id: string) => bookmarkService.updateStatus(id, 'done'),
-    onSuccess: () => {
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ['bookmarks'] });
+      const prev = queryClient.getQueryData<Bookmark[]>(['bookmarks']);
+      queryClient.setQueryData<Bookmark[]>(['bookmarks'], (old = []) =>
+        old.map((b) => b.id === id ? { ...b, status: 'done' } : b)
+      );
+      return { prev };
+    },
+    onError: (_, __, ctx) => {
+      queryClient.setQueryData(['bookmarks'], ctx?.prev);
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['bookmarks'] });
-      toast({
-        title: "Marked as done!",
-        description: "Moved to your watched list.",
-      });
+    },
+    onSuccess: () => {
+      toast({ title: "Marked as done!", description: "Moved to your watched list." });
     },
   });
 
   // Undo done mutation (move back to backlog)
   const undoDoneMutation = useMutation({
     mutationFn: (id: string) => bookmarkService.updateStatus(id, 'backlog'),
-    onSuccess: () => {
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ['bookmarks'] });
+      const prev = queryClient.getQueryData<Bookmark[]>(['bookmarks']);
+      queryClient.setQueryData<Bookmark[]>(['bookmarks'], (old = []) =>
+        old.map((b) => b.id === id ? { ...b, status: 'backlog' } : b)
+      );
+      return { prev };
+    },
+    onError: (_, __, ctx) => {
+      queryClient.setQueryData(['bookmarks'], ctx?.prev);
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['bookmarks'] });
-      toast({
-        title: "Moved to backlog",
-        description: "Ready to watch again.",
-      });
+    },
+    onSuccess: () => {
+      toast({ title: "Moved to backlog", description: "Ready to watch again." });
     },
   });
 
   // Set as watching mutation
   const setWatchingMutation = useMutation({
     mutationFn: (id: string) => bookmarkService.updateStatus(id, 'watching'),
-    onSuccess: () => {
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ['bookmarks'] });
+      const prev = queryClient.getQueryData<Bookmark[]>(['bookmarks']);
+      queryClient.setQueryData<Bookmark[]>(['bookmarks'], (old = []) =>
+        old.map((b) => b.id === id ? { ...b, status: 'watching' } : b)
+      );
+      return { prev };
+    },
+    onError: (_, __, ctx) => {
+      queryClient.setQueryData(['bookmarks'], ctx?.prev);
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['bookmarks'] });
-      toast({
-        title: "Now watching!",
-        description: "Added to Continue Watching.",
-      });
+    },
+    onSuccess: () => {
+      toast({ title: "Now watching!", description: "Added to Continue Watching." });
     },
   });
 
@@ -185,14 +217,44 @@ const Dashboard = () => {
       mood_tags: bookmark.mood_tags,
       notes: bookmark.notes,
       metadata: bookmark.metadata,
-    }).then(() => queryClient.invalidateQueries({ queryKey: ['bookmarks'] }));
+    }).then((newBookmark) => {
+      queryClient.invalidateQueries({ queryKey: ['bookmarks'] });
+      toast({
+        title: "Restored",
+        description: `"${newBookmark.title}" has been restored to your watchlist.`,
+      });
+    }).catch((error: any) => {
+      toast({
+        title: "Error restoring bookmark",
+        description: error.message || "Failed to restore the bookmark. Please try again.",
+        variant: "destructive",
+      });
+    });
   };
 
   // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: (bookmark: Bookmark) => bookmarkService.deleteBookmark(bookmark.id),
-    onSuccess: (_, bookmark) => {
+    onMutate: async (bookmark) => {
+      await queryClient.cancelQueries({ queryKey: ['bookmarks'] });
+      const prev = queryClient.getQueryData<Bookmark[]>(['bookmarks']);
+      queryClient.setQueryData<Bookmark[]>(['bookmarks'], (old = []) =>
+        old.filter((b) => b.id !== bookmark.id)
+      );
+      return { prev };
+    },
+    onError: (error: any, _, ctx) => {
+      queryClient.setQueryData(['bookmarks'], ctx?.prev);
+      toast({
+        title: "Error deleting",
+        description: error.message || "Something went wrong.",
+        variant: "destructive",
+      });
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['bookmarks'] });
+    },
+    onSuccess: (_, bookmark) => {
       toast({
         title: "Deleted",
         description: `"${bookmark.title}" removed.`,
@@ -203,20 +265,15 @@ const Dashboard = () => {
         ),
       });
     },
-    onError: (error: any) => {
-      toast({
-        title: "Error deleting",
-        description: error.message || "Something went wrong.",
-        variant: "destructive",
-      });
-    },
   });
 
   // Add to plan mutation
   const addToPlanMutation = useMutation({
-    mutationFn: ({ planId, bookmarkId }: { planId: string; bookmarkId: string }) => 
+    mutationFn: ({ planId, bookmarkId }: { planId: string; bookmarkId: string }) =>
       watchPlanService.addBookmarkToPlan(planId, bookmarkId),
-    onSuccess: () => {
+    onSuccess: (_, { planId }) => {
+      queryClient.invalidateQueries({ queryKey: ['watch-plans'] });
+      queryClient.invalidateQueries({ queryKey: ['plan-bookmarks', planId] });
       setPlanOpen(false);
       setSelectedBookmark(null);
       toast({
@@ -349,9 +406,12 @@ const Dashboard = () => {
   if (error) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
+        <div className="text-center space-y-3">
           <p className="text-destructive mb-2">Error loading bookmarks</p>
-          <p className="text-muted-foreground text-sm">Please try refreshing the page</p>
+          <p className="text-muted-foreground text-sm">Something went wrong fetching your data.</p>
+          <Button variant="outline" size="sm" onClick={() => refetch()}>
+            Try again
+          </Button>
         </div>
       </div>
     );

@@ -26,7 +26,15 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const PublicProfile = lazy(() => import("./pages/PublicProfile"));
 const ShareView = lazy(() => import("./pages/ShareView"));
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000,
+      gcTime: 10 * 60 * 1000,
+      retry: 1,
+    },
+  },
+});
 
 const PageLoader = () => (
   <div className="min-h-screen bg-background flex items-center justify-center">
