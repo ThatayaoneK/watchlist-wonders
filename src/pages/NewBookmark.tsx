@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate, Link } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft, Link as LinkIcon, Loader2, Upload, X, Plus, Clock,
   Tag, FileText, Film, Tv, Play, ChevronRight, Sparkles,
@@ -95,6 +95,16 @@ const NewBookmark = () => {
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [moreOptionsOpen, setMoreOptionsOpen] = useState(false);
+
+  // Duplicate detection
+  const { data: allBookmarks = [] } = useQuery({
+    queryKey: ['bookmarks'],
+    queryFn: () => bookmarkService.getBookmarks(),
+    staleTime: 60 * 1000,
+  });
+  const duplicateBookmark = metadata.tmdb_id
+    ? allBookmarks.find((b) => (b.metadata?.tmdb_id ?? b.metadata?.tmdbId) === metadata.tmdb_id)
+    : null;
 
   // Attachment state
   const [attachments, setAttachments] = useState<File[]>([]);
@@ -427,6 +437,19 @@ const NewBookmark = () => {
 
       {/* Step 2 content */}
       <div className="container mx-auto px-4 lg:px-8 py-8 max-w-4xl">
+        {/* Duplicate warning */}
+        {duplicateBookmark && (
+          <div className="mb-6 flex items-start gap-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 text-sm">
+            <span className="text-yellow-500 mt-0.5">⚠</span>
+            <div>
+              <span className="font-medium text-foreground">Already in your watchlist — </span>
+              <Link to={`/b/${duplicateBookmark.id}`} className="text-primary hover:underline">
+                View "{duplicateBookmark.title}"
+              </Link>
+              <span className="text-muted-foreground"> · You can still save another copy.</span>
+            </div>
+          </div>
+        )}
         <form id="bookmark-form" onSubmit={handleSubmit}>
           <div className="grid md:grid-cols-[200px_1fr] gap-8">
             {/* Left: Poster preview */}

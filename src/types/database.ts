@@ -20,6 +20,11 @@ export interface Bookmark {
   shown_count: number;
   created_at: string;
   updated_at: string;
+  // Personal rating & review
+  user_rating?: number | null;     // 1–5 stars
+  user_review?: string | null;
+  // Watch tracking
+  watched_at?: string | null;      // ISO date first marked as done
   // Sharing
   is_public?: boolean;
   share_token?: string;

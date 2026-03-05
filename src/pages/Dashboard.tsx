@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { format } from "date-fns";
-import { CalendarClock } from "lucide-react";
+import { CalendarClock, Shuffle, ArrowUpDown, Play, Check } from "lucide-react";
 import { TopNav } from "@/components/layout/TopNav";
 import { HeroBanner } from "@/components/layout/HeroBanner";
 import { Rail } from "@/components/bookmarks/Rail";
@@ -30,13 +30,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { ToastAction } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { formatRuntime } from "@/lib/utils";
 
 type FilterType = "all" | "movie" | "series" | "video" | "doc";
 type FilterStatus = "all" | "backlog" | "watching" | "done";
+type SortOption = "newest" | "oldest" | "az" | "runtime" | "rating";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -53,6 +61,10 @@ const Dashboard = () => {
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilters>({
     providers: [], moods: [], runtimeMin: null, runtimeMax: null,
   });
+
+  // Sort + Surprise Me state
+  const [sortBy, setSortBy] = useState<SortOption>("newest");
+  const [surpriseBookmark, setSurpriseBookmark] = useState<Bookmark | null>(null);
 
   // Bulk select state
   const [selectMode, setSelectMode] = useState(false);
@@ -109,7 +121,7 @@ const Dashboard = () => {
       .reduce((sum, b) => sum + (b.runtime_minutes || 0), 0),
   }), [bookmarks, filterCounts]);
 
-  // Apply filters
+  // Apply filters + sort
   const filteredBookmarks = useMemo(() => {
     const hasAdvanced =
       advancedFilters.providers.length > 0 ||
@@ -117,7 +129,7 @@ const Dashboard = () => {
       advancedFilters.runtimeMin !== null ||
       advancedFilters.runtimeMax !== null;
 
-    return bookmarks.filter((b) => {
+    const filtered = bookmarks.filter((b) => {
       const typeMatch = filterType === "all" || b.type === filterType;
       const statusMatch = filterStatus === "all" || b.status === filterStatus;
       if (!typeMatch || !statusMatch) return false;
@@ -131,7 +143,17 @@ const Dashboard = () => {
         (rtMax === null || (b.runtime_minutes !== null && b.runtime_minutes <= rtMax));
       return providerMatch && moodMatch && runtimeMatch;
     });
-  }, [bookmarks, filterType, filterStatus, advancedFilters]);
+
+    return [...filtered].sort((a, b) => {
+      switch (sortBy) {
+        case "oldest": return a.created_at.localeCompare(b.created_at);
+        case "az": return a.title.localeCompare(b.title);
+        case "runtime": return (b.runtime_minutes || 0) - (a.runtime_minutes || 0);
+        case "rating": return (b.user_rating || 0) - (a.user_rating || 0);
+        default: return b.created_at.localeCompare(a.created_at); // newest
+      }
+    });
+  }, [bookmarks, filterType, filterStatus, advancedFilters, sortBy]);
 
   // Mark as done mutation
   const markDoneMutation = useMutation({
@@ -452,6 +474,12 @@ const Dashboard = () => {
     });
   });
 
+  const handleSurpriseMe = () => {
+    const pool = backlog.length > 0 ? backlog : displayBookmarks;
+    if (pool.length === 0) return;
+    setSurpriseBookmark(pool[Math.floor(Math.random() * pool.length)]);
+  };
+
   const handlePlay = () => {
     if (heroBookmark?.source_url) {
       window.open(heroBookmark.source_url, "_blank");
@@ -527,6 +555,31 @@ const Dashboard = () => {
                 />
               </div>
               <div className="flex items-center gap-2 shrink-0">
+                {/* Sort */}
+                <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
+                  <SelectTrigger className="h-8 text-xs w-[110px] gap-1">
+                    <ArrowUpDown className="w-3 h-3 shrink-0" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="newest">Newest</SelectItem>
+                    <SelectItem value="oldest">Oldest</SelectItem>
+                    <SelectItem value="az">A–Z</SelectItem>
+                    <SelectItem value="runtime">Runtime</SelectItem>
+                    <SelectItem value="rating">My Rating</SelectItem>
+                  </SelectContent>
+                </Select>
+                {/* Surprise Me */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSurpriseMe}
+                  className="h-8 text-xs gap-1"
+                  title="Pick a random title from your backlog"
+                >
+                  <Shuffle className="w-3 h-3" />
+                  <span className="hidden sm:inline">Surprise</span>
+                </Button>
                 <Button
                   variant={filterPanelOpen ? "secondary" : "outline"}
                   size="sm"
@@ -818,6 +871,65 @@ const Dashboard = () => {
         onAddToPlan={handleBulkAddToPlan}
         onClear={() => { setSelectedIds(new Set()); setSelectMode(false); }}
       />
+
+      {/* Surprise Me Sheet */}
+      <Sheet open={!!surpriseBookmark} onOpenChange={(o) => { if (!o) setSurpriseBookmark(null); }}>
+        <SheetContent side="bottom" className="rounded-t-2xl pb-8">
+          {surpriseBookmark && (
+            <>
+              <SheetHeader className="mb-4">
+                <SheetTitle className="flex items-center gap-2">
+                  <Shuffle className="w-4 h-4 text-primary" />
+                  Watch Tonight
+                </SheetTitle>
+              </SheetHeader>
+              <div className="flex gap-4">
+                {(surpriseBookmark.poster_url || surpriseBookmark.backdrop_url) && (
+                  <img
+                    src={surpriseBookmark.poster_url || surpriseBookmark.backdrop_url!}
+                    alt={surpriseBookmark.title}
+                    className="w-20 h-28 object-cover rounded-lg shrink-0"
+                  />
+                )}
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-lg truncate">{surpriseBookmark.title}</h3>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
+                    {surpriseBookmark.release_year && <span>{surpriseBookmark.release_year}</span>}
+                    {surpriseBookmark.runtime_minutes && (
+                      <span>· {formatRuntime(surpriseBookmark.runtime_minutes)}</span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-4">
+                    {surpriseBookmark.source_url && (
+                      <Button size="sm" onClick={() => window.open(surpriseBookmark.source_url!, "_blank")}>
+                        <Play className="w-3 h-3 mr-1 fill-current" />
+                        Watch Now
+                      </Button>
+                    )}
+                    <Button size="sm" variant="secondary" onClick={() => {
+                      markDoneMutation.mutate(surpriseBookmark.id);
+                      setSurpriseBookmark(null);
+                    }}>
+                      <Check className="w-3 h-3 mr-1" />
+                      Mark Done
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => {
+                      navigate(`/b/${surpriseBookmark.id}`);
+                      setSurpriseBookmark(null);
+                    }}>
+                      Details
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={handleSurpriseMe}>
+                      <Shuffle className="w-3 h-3 mr-1" />
+                      Reroll
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
 
     </div>
   );

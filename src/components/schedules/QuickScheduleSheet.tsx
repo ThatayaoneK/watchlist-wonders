@@ -66,6 +66,11 @@ interface QuickScheduleSheetProps {
   onScheduled?: () => void;
 }
 
+function getLocalDateInputValue(date = new Date()): string {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().split("T")[0];
+}
+
 export function QuickScheduleSheet({
   bookmark,
   open,
@@ -85,7 +90,7 @@ export function QuickScheduleSheet({
       return scheduleService.createSchedule({
         bookmark_id: bookmark.id,
         scheduled_for: scheduledFor.toISOString(),
-        reminder_offset_minutes: parseInt(reminderOffset),
+        reminder_offset_minutes: parseInt(reminderOffset, 10),
         recurrence_type: "none",
       });
     },
@@ -126,7 +131,7 @@ export function QuickScheduleSheet({
     mutation.mutate(d);
   };
 
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = getLocalDateInputValue();
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>

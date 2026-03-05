@@ -1,19 +1,19 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Button } from "@/components/ui/button";
 import { TopNav } from "@/components/layout/TopNav";
 import { SearchOverlay } from "@/components/search/SearchOverlay";
-import { cn, formatRuntime } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { scheduleService } from "@/services/schedules";
 import { bookmarkService } from "@/services/bookmarks";
 import { useSearchShortcut } from "@/hooks/useSearchShortcut";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths, isToday } from "date-fns";
 
+const ACTIVE_SCHEDULE_STATES = new Set(["scheduled", "snoozed"]);
+
 const Calendar = () => {
-  const navigate = useNavigate();
   const { isSearchOpen, openSearch, closeSearch } = useSearchShortcut();
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
@@ -36,9 +36,11 @@ const Calendar = () => {
   
   // Create padding days for the calendar grid
   const paddingDays = Array.from({ length: startDayOfWeek }, (_, i) => null);
+  const visibleSchedules = schedules.filter((s) => ACTIVE_SCHEDULE_STATES.has(s.state));
+  const upcomingSchedules = visibleSchedules.filter((s) => new Date(s.scheduled_for) >= new Date());
 
   const getSchedulesForDay = (date: Date) => {
-    return schedules.filter((s) => isSameDay(new Date(s.scheduled_for), date));
+    return visibleSchedules.filter((s) => isSameDay(new Date(s.scheduled_for), date));
   };
 
   if (isLoading) {
@@ -149,7 +151,7 @@ const Calendar = () => {
         {/* Upcoming Schedules */}
         <div className="mt-6">
           <h3 className="text-lg font-semibold text-foreground mb-3">Upcoming</h3>
-          {schedules.filter((s) => new Date(s.scheduled_for) >= new Date()).length === 0 ? (
+          {upcomingSchedules.length === 0 ? (
             <div className="text-center py-8 bg-card border border-border rounded-lg">
               <CalendarIcon className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
               <p className="text-muted-foreground">No upcoming schedules</p>
@@ -159,8 +161,7 @@ const Calendar = () => {
             </div>
           ) : (
             <div className="space-y-2">
-              {schedules
-                .filter((s) => new Date(s.scheduled_for) >= new Date())
+              {upcomingSchedules
                 .slice(0, 5)
                 .map((schedule) => (
                   <div
@@ -169,6 +170,9 @@ const Calendar = () => {
                   >
                     <div className="flex-1">
                       <p className="font-medium text-foreground">
+                        {schedule.bookmarks?.title ?? "Untitled"}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
                         {format(new Date(schedule.scheduled_for), "EEEE, MMMM d")}
                       </p>
                       <p className="text-sm text-muted-foreground">

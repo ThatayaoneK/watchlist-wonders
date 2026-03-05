@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
-import { User, Mail, LogOut, Shield, Bell, Camera, Trash2, Loader2, Globe, ExternalLink } from "lucide-react";
+import { User, Mail, LogOut, Shield, Bell, Camera, Trash2, Loader2, Globe, ExternalLink, Download } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { bookmarkService } from "@/services/bookmarks";
@@ -180,6 +180,31 @@ const Settings = () => {
     } catch (error: any) {
       toast({ title: "Failed to send reset email", description: error.message || "Please try again.", variant: "destructive" });
     }
+  };
+
+  const handleExportCSV = () => {
+    const headers = ["Title", "Type", "Provider", "Status", "Runtime (min)", "Year", "My Rating", "Notes", "Source URL", "Added"];
+    const rows = bookmarks.map((b) => [
+      `"${(b.title || "").replace(/"/g, '""')}"`,
+      b.type,
+      b.provider,
+      b.status,
+      b.runtime_minutes ?? "",
+      b.release_year ?? "",
+      b.user_rating ?? "",
+      `"${(b.notes || "").replace(/"/g, '""')}"`,
+      b.source_url ?? "",
+      b.created_at ? new Date(b.created_at).toLocaleDateString() : "",
+    ].join(","));
+    const csv = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `watchmarks-export-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast({ title: "Export downloaded", description: `${bookmarks.length} bookmarks exported.` });
   };
 
   const handleSignOut = async () => {
@@ -437,6 +462,23 @@ const Settings = () => {
                 <Separator />
                 <Button variant="ghost" size="sm" className="w-full text-muted-foreground" onClick={handleResetViaEmail}>
                   Send password reset email instead
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Export */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Download className="w-5 h-5" />
+                  Export Data
+                </CardTitle>
+                <CardDescription>Download your watchlist as a CSV file</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button variant="outline" onClick={handleExportCSV} disabled={bookmarks.length === 0}>
+                  <Download className="w-4 h-4 mr-2" />
+                  Download CSV ({bookmarks.length} bookmarks)
                 </Button>
               </CardContent>
             </Card>

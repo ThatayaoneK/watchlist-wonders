@@ -1,12 +1,14 @@
 import { useState, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft, Play, Check, Trash2, Edit2,
   Clock, Tag, ExternalLink, Save, X,
   Paperclip, FileText, Download, Upload, Loader2, Star,
-  Share2, Globe, Lock, Copy,
+  Share2, Globe, Lock, Copy, Tv, Plus, Shuffle,
 } from "lucide-react";
+import { useWatchProviders } from "@/hooks/useWatchProviders";
+import { useSimilarTitles } from "@/hooks/useSimilarTitles";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -160,6 +162,37 @@ const BookmarkDetail = () => {
     },
   });
 
+  const rateMutation = useMutation({
+    mutationFn: ({ rating, review }: { rating: number | null; review?: string | null }) =>
+      bookmarkService.rateBookmark(id!, rating, review),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bookmark', id] });
+      queryClient.invalidateQueries({ queryKey: ['bookmarks'] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to save rating", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const addSimilarMutation = useMutation({
+    mutationFn: (item: { id: number; title: string; posterUrl: string | null; release_year: number | null; media_type: 'movie' | 'tv' }) =>
+      bookmarkService.createBookmark({
+        title: item.title,
+        type: item.media_type === 'tv' ? 'series' : 'movie',
+        provider: 'tmdb',
+        poster_url: item.posterUrl,
+        release_year: item.release_year,
+        metadata: { tmdb_id: item.id },
+      }),
+    onSuccess: (newBm) => {
+      queryClient.invalidateQueries({ queryKey: ['bookmarks'] });
+      toast({ title: "Added to watchlist", description: newBm.title });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to add", description: error.message, variant: "destructive" });
+    },
+  });
+
   const handleStartEdit = () => {
     if (bookmark) {
       setEditTitle(bookmark.title);
@@ -180,6 +213,26 @@ const BookmarkDetail = () => {
   const handleStatusChange = (status: Bookmark["status"]) => {
     updateMutation.mutate({ status });
   };
+
+  // Handle both camelCase (tmdbId) and snake_case (tmdb_id) — legacy data may differ
+  const tmdbId = (bookmark?.metadata?.tmdb_id ?? bookmark?.metadata?.tmdbId) as number | string | undefined;
+  const { data: watchProviders } = useWatchProviders(tmdbId, bookmark?.type || 'movie');
+  const { data: similarTitles = [] } = useSimilarTitles(tmdbId, bookmark?.type || 'movie');
+
+  // IDs already in the user's bookmarks (for duplicate guard on similar titles)
+  const { data: allBookmarks = [] } = useQuery({
+    queryKey: ['bookmarks'],
+    queryFn: () => bookmarkService.getBookmarks(),
+    staleTime: 60 * 1000,
+  });
+  const ownedTmdbIds = new Set(
+    allBookmarks
+      .map((b) => {
+        const id = b.metadata?.tmdb_id ?? b.metadata?.tmdbId;
+        return typeof id === 'string' ? parseInt(id, 10) : id;
+      })
+      .filter((id) => typeof id === 'number' && !isNaN(id))
+  );
 
   if (isLoading) {
     return (
@@ -432,6 +485,104 @@ const BookmarkDetail = () => {
                 </div>
               )}
 
+              {/* Personal Rating */}
+              <div className="mb-6">
+                <h3 className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-1">
+                  <Star className="w-4 h-4" />
+                  My Rating
+                </h3>
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => rateMutation.mutate({
+                        rating: bookmark.user_rating === star ? null : star,
+                      })}
+                      className="p-0.5 hover:scale-110 transition-transform"
+                      aria-label={`Rate ${star} star${star !== 1 ? 's' : ''}`}
+                    >
+                      <Star
+                        className={`w-6 h-6 ${
+                          (bookmark.user_rating || 0) >= star
+                            ? 'fill-yellow-400 text-yellow-400'
+                            : 'text-muted-foreground'
+                        }`}
+                      />
+                    </button>
+                  ))}
+                  {bookmark.user_rating && (
+                    <span className="text-sm text-muted-foreground ml-2">
+                      {bookmark.user_rating}/5
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Where to Watch */}
+              {watchProviders && (
+                (watchProviders.flatrate.length > 0 || watchProviders.rent.length > 0 || watchProviders.buy.length > 0)
+              ) && (
+                <div className="mb-6">
+                  <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-1">
+                    <Tv className="w-4 h-4" />
+                    Where to Watch
+                  </h3>
+                  <div className="space-y-3">
+                    {watchProviders!.flatrate.length > 0 && (
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1.5">Stream</p>
+                        <div className="flex flex-wrap gap-2">
+                          {watchProviders!.flatrate.map((p) => (
+                            <div key={p.provider_id} className="flex items-center gap-1.5 bg-secondary rounded-lg px-2 py-1.5" title={p.provider_name}>
+                              <img src={p.logoUrl} alt={p.provider_name} className="w-5 h-5 rounded" />
+                              <span className="text-xs">{p.provider_name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {watchProviders!.rent.length > 0 && (
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1.5">Rent</p>
+                        <div className="flex flex-wrap gap-2">
+                          {watchProviders!.rent.map((p) => (
+                            <div key={p.provider_id} className="flex items-center gap-1.5 bg-secondary rounded-lg px-2 py-1.5" title={p.provider_name}>
+                              <img src={p.logoUrl} alt={p.provider_name} className="w-5 h-5 rounded" />
+                              <span className="text-xs">{p.provider_name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {watchProviders!.buy.length > 0 && (
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1.5">Buy</p>
+                        <div className="flex flex-wrap gap-2">
+                          {watchProviders!.buy.map((p) => (
+                            <div key={p.provider_id} className="flex items-center gap-1.5 bg-secondary rounded-lg px-2 py-1.5" title={p.provider_name}>
+                              <img src={p.logoUrl} alt={p.provider_name} className="w-5 h-5 rounded" />
+                              <span className="text-xs">{p.provider_name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {watchProviders!.link && (
+                      <a
+                        href={watchProviders!.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        View all options on JustWatch
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Source Link */}
               {bookmark.source_url && (
                 <div className="mb-6">
@@ -580,6 +731,57 @@ const BookmarkDetail = () => {
                   </div>
                 )}
               </div>
+              {/* Similar Titles */}
+              {similarTitles.length > 0 && (
+                <div className="mb-6">
+                  <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-1">
+                    <Shuffle className="w-4 h-4" />
+                    You Might Also Like
+                  </h3>
+                  <div className="flex gap-3 overflow-x-auto pb-2 hide-scrollbar">
+                    {similarTitles.map((item) => {
+                      const alreadyOwned = ownedTmdbIds.has(item.id);
+                      return (
+                        <div key={item.id} className="shrink-0 w-28 group">
+                          <div className="relative aspect-[2/3] rounded-lg overflow-hidden bg-secondary mb-1.5">
+                            {item.posterUrl ? (
+                              <img
+                                src={item.posterUrl}
+                                alt={item.title}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <span className="text-2xl font-bold text-muted-foreground">{item.title.charAt(0)}</span>
+                              </div>
+                            )}
+                            {!alreadyOwned && (
+                              <button
+                                type="button"
+                                onClick={() => addSimilarMutation.mutate(item)}
+                                disabled={addSimilarMutation.isPending}
+                                className="absolute inset-0 bg-background/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                                aria-label={`Add ${item.title} to watchlist`}
+                              >
+                                <Plus className="w-6 h-6 text-primary" />
+                              </button>
+                            )}
+                            {alreadyOwned && (
+                              <div className="absolute top-1 right-1 bg-primary rounded-full p-0.5">
+                                <Check className="w-3 h-3 text-primary-foreground" />
+                              </div>
+                            )}
+                          </div>
+                          <p className="text-xs text-foreground truncate">{item.title}</p>
+                          {item.release_year && (
+                            <p className="text-[10px] text-muted-foreground">{item.release_year}</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>

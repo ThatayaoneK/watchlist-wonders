@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Home, Search, Plus, Calendar, User } from "lucide-react";
+import { Home, Search, Plus, BarChart2, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface BottomNavProps {
@@ -52,16 +52,16 @@ export function BottomNav({ onSearchClick, onAddClick }: BottomNavProps) {
           <span className="text-[10px] font-medium text-muted-foreground mt-0.5">Add</span>
         </button>
 
-        {/* Calendar */}
+        {/* Stats */}
         <Link
-          to="/calendar"
+          to="/stats"
           className={cn(
             "flex flex-col items-center gap-1 px-4 py-2 rounded-lg transition-colors",
-            location.pathname === "/calendar" ? "text-primary" : "text-muted-foreground hover:text-foreground"
+            location.pathname === "/stats" ? "text-primary" : "text-muted-foreground hover:text-foreground"
           )}
         >
-          <Calendar className="w-5 h-5" />
-          <span className="text-[10px] font-medium">Calendar</span>
+          <BarChart2 className="w-5 h-5" />
+          <span className="text-[10px] font-medium">Stats</span>
         </Link>
 
         {/* Settings */}

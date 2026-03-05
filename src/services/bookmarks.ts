@@ -116,10 +116,33 @@ export const bookmarkService = {
   },
 
   /**
-   * Update bookmark status
+   * Update bookmark status, setting watched_at when first marked done
    */
   async updateStatus(id: string, status: Bookmark['status']): Promise<Bookmark> {
-    return this.updateBookmark(id, { status });
+    const updates: Partial<Bookmark> = { status };
+    if (status === 'done') {
+      const current = await this.getBookmark(id);
+      if (!current.watched_at) {
+        updates.watched_at = new Date().toISOString();
+      }
+    }
+    return this.updateBookmark(id, updates);
+  },
+
+  /**
+   * Rate a bookmark (1–5 stars) with optional personal review
+   */
+  async rateBookmark(id: string, rating: number | null, review?: string | null): Promise<Bookmark> {
+    // Validate rating: must be null or an integer between 1 and 5
+    if (rating !== null) {
+      if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+        throw new Error('Rating must be null or an integer between 1 and 5');
+      }
+    }
+    return this.updateBookmark(id, {
+      user_rating: rating,
+      ...(review !== undefined ? { user_review: review } : {}),
+    });
   },
 
   /**

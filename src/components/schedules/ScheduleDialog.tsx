@@ -26,11 +26,16 @@ interface ScheduleDialogProps {
 
 type Recurrence = 'none' | 'daily' | 'weekly' | 'monthly';
 
+function getLocalDateInputValue(date = new Date()): string {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().split("T")[0];
+}
+
 export function ScheduleDialog({ bookmark, open, onOpenChange, onScheduled }: ScheduleDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalDateInputValue();
   const [scheduleDate, setScheduleDate] = useState(today);
   const [scheduleTime, setScheduleTime] = useState("20:00");
   const [reminderOffset, setReminderOffset] = useState("60");
@@ -42,12 +47,13 @@ export function ScheduleDialog({ bookmark, open, onOpenChange, onScheduled }: Sc
       if (!scheduleDate || !scheduleTime) throw new Error("Date and time are required");
       const baseDate = new Date(`${scheduleDate}T${scheduleTime}`);
       if (isNaN(baseDate.getTime())) throw new Error("Invalid date or time");
+      if (baseDate <= new Date()) throw new Error("Cannot schedule in the past.");
 
       // Create the primary schedule
       const primary = await scheduleService.createSchedule({
         bookmark_id: bookmark.id,
         scheduled_for: baseDate.toISOString(),
-        reminder_offset_minutes: parseInt(reminderOffset),
+        reminder_offset_minutes: parseInt(reminderOffset, 10),
         recurrence_type: recurrence,
       });
 
@@ -64,7 +70,7 @@ export function ScheduleDialog({ bookmark, open, onOpenChange, onScheduled }: Sc
             scheduleService.createSchedule({
               bookmark_id: bookmark.id,
               scheduled_for: d.toISOString(),
-              reminder_offset_minutes: parseInt(reminderOffset),
+              reminder_offset_minutes: parseInt(reminderOffset, 10),
               recurrence_type: recurrence,
             })
           )
@@ -130,6 +136,7 @@ export function ScheduleDialog({ bookmark, open, onOpenChange, onScheduled }: Sc
               <Input
                 id="sched-date"
                 type="date"
+                min={today}
                 value={scheduleDate}
                 onChange={(e) => setScheduleDate(e.target.value)}
               />

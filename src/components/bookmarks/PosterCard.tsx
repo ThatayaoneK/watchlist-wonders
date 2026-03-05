@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Play, Plus, Check, CalendarPlus, MoreHorizontal, ExternalLink, Trash2, Undo2, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
@@ -82,6 +81,116 @@ function isNewBookmark(createdAt: string) {
   return now.getTime() - created.getTime() < 24 * 60 * 60 * 1000;
 }
 
+const trailerUrlCache = new Map<string, string | null>();
+
+function getMetadataNumber(metadata: Record<string, unknown>, keys: string[]): number | null {
+  for (const key of keys) {
+    const value = metadata[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string") {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return null;
+}
+
+function getMetadataString(metadata: Record<string, unknown>, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = metadata[key];
+    if (typeof value === "string" && value.trim().length > 0) return value.trim();
+  }
+  return null;
+}
+
+function extractYouTubeVideoId(url: string): string | null {
+  try {
+    const u = new URL(url);
+    if (u.hostname === "youtu.be") return u.pathname.slice(1).split("?")[0];
+    if (u.hostname.includes("youtube.com")) return u.searchParams.get("v");
+  } catch {
+    // Ignore invalid URLs
+  }
+  return null;
+}
+
+function toYouTubeEmbedUrl(videoId: string, autoplay = true): string {
+  const params = new URLSearchParams({
+    autoplay: autoplay ? "1" : "0",
+    mute: "1",
+    controls: "0",
+    rel: "0",
+    modestbranding: "1",
+    playsinline: "1",
+    loop: "1",
+    playlist: videoId,
+  });
+  return `https://www.youtube.com/embed/${videoId}?${params.toString()}`;
+}
+
+function toTrailerEmbedUrl(rawUrl: string): string | null {
+  const youtubeId = extractYouTubeVideoId(rawUrl);
+  if (youtubeId) return toYouTubeEmbedUrl(youtubeId);
+  return null;
+}
+
+function getBookmarkTrailerUrl(bookmark: Bookmark): string | null {
+  const metadata = bookmark.metadata || {};
+  const fromMetadata = getMetadataString(metadata, [
+    "trailer_url",
+    "trailerUrl",
+    "youtube_trailer_url",
+    "youtubeTrailerUrl",
+    "video_url",
+    "videoUrl",
+  ]);
+  if (fromMetadata) {
+    const embedded = toTrailerEmbedUrl(fromMetadata);
+    if (embedded) return embedded;
+  }
+
+  if (bookmark.source_url) {
+    const embedded = toTrailerEmbedUrl(bookmark.source_url);
+    if (embedded) return embedded;
+  }
+
+  return null;
+}
+
+async function fetchTmdbTrailerUrl(bookmark: Bookmark): Promise<string | null> {
+  const tmdbApiKey = import.meta.env.VITE_TMDB_API_KEY;
+  if (!tmdbApiKey) return null;
+
+  const tmdbId = getMetadataNumber(bookmark.metadata || {}, ["tmdb_id", "tmdbId"]);
+  if (!tmdbId) return null;
+
+  const mediaType = bookmark.type === "series" ? "tv" : "movie";
+  const cacheKey = `${mediaType}:${tmdbId}`;
+  if (trailerUrlCache.has(cacheKey)) return trailerUrlCache.get(cacheKey) ?? null;
+
+  try {
+    const res = await fetch(`https://api.themoviedb.org/3/${mediaType}/${tmdbId}/videos?api_key=${tmdbApiKey}`);
+    if (!res.ok) {
+      trailerUrlCache.set(cacheKey, null);
+      return null;
+    }
+
+    const data = (await res.json()) as { results?: Array<{ site?: string; type?: string; official?: boolean; key?: string }> };
+    const videos = data.results || [];
+    const selected =
+      videos.find((v) => v.site === "YouTube" && v.type === "Trailer" && v.official && v.key) ||
+      videos.find((v) => v.site === "YouTube" && v.type === "Trailer" && v.key) ||
+      videos.find((v) => v.site === "YouTube" && (v.type === "Teaser" || v.type === "Clip") && v.key);
+
+    const trailerUrl = selected?.key ? toYouTubeEmbedUrl(selected.key) : null;
+    trailerUrlCache.set(cacheKey, trailerUrl);
+    return trailerUrl;
+  } catch {
+    trailerUrlCache.set(cacheKey, null);
+    return null;
+  }
+}
+
 export function PosterCard({
   bookmark,
   onPlay,
@@ -102,6 +211,7 @@ export function PosterCard({
   const [isTouched, setIsTouched] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [quickScheduleOpen, setQuickScheduleOpen] = useState(false);
+  const [trailerUrl, setTrailerUrl] = useState<string | null>(() => getBookmarkTrailerUrl(bookmark));
   const cardRef = useRef<HTMLAnchorElement>(null);
 
   const imageUrl =
@@ -113,8 +223,22 @@ export function PosterCard({
   const handlePlay = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (onPlay) {
+      onPlay();
+      return;
+    }
+    if (!trailerUrl && bookmark.source_url) {
+      window.open(bookmark.source_url, "_blank", "noopener");
+      return;
+    }
+    setIsHovered(true);
+    setIsTouched(true);
+  };
+
+  const handleOpenSource = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     if (bookmark.source_url) window.open(bookmark.source_url, "_blank");
-    onPlay?.();
   };
 
   const handleScheduleClick = (e: React.MouseEvent) => {
@@ -140,6 +264,28 @@ export function PosterCard({
     MOOD_COLOR[mood.toLowerCase()] || "bg-muted text-muted-foreground";
 
   const isNew = isNewBookmark(bookmark.created_at);
+  const isPreviewActive =
+    !isMobile &&
+    !isSelectable &&
+    (isHovered || isTouched);
+  const showTrailerPreview = isPreviewActive && Boolean(trailerUrl);
+
+  useEffect(() => {
+    setTrailerUrl(getBookmarkTrailerUrl(bookmark));
+  }, [bookmark.id, bookmark.source_url, bookmark.metadata]);
+
+  useEffect(() => {
+    if (!isPreviewActive || trailerUrl) return;
+
+    let cancelled = false;
+    fetchTmdbTrailerUrl(bookmark).then((url) => {
+      if (!cancelled && url) setTrailerUrl(url);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isPreviewActive, trailerUrl, bookmark]);
 
   // Add document-level listener to clear isTouched for touch-only devices
   useEffect(() => {
@@ -195,6 +341,18 @@ export function PosterCard({
               <span className="text-3xl font-bold text-muted-foreground/40">
                 {bookmark.title.charAt(0).toUpperCase()}
               </span>
+            </div>
+          )}
+
+          {showTrailerPreview && trailerUrl && (
+            <div className="absolute inset-0 z-[1] bg-black">
+              <iframe
+                src={trailerUrl}
+                title={`${bookmark.title} trailer preview`}
+                className="w-full h-full pointer-events-none"
+                allow="autoplay; encrypted-media; picture-in-picture"
+                loading="lazy"
+              />
             </div>
           )}
 
@@ -302,7 +460,7 @@ export function PosterCard({
                     Quick Schedule
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handlePlay}>
+                  <DropdownMenuItem onClick={handleOpenSource}>
                     <ExternalLink className="w-4 h-4 mr-2" />
                     Open Source
                   </DropdownMenuItem>
@@ -387,7 +545,7 @@ export function PosterCard({
                         Add to Plan
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={handlePlay}>
+                      <DropdownMenuItem onClick={handleOpenSource}>
                         <ExternalLink className="w-4 h-4 mr-2" />
                         Open Source
                       </DropdownMenuItem>

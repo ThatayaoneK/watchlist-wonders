@@ -25,6 +25,7 @@ const Settings = lazy(() => import("./pages/Settings"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const PublicProfile = lazy(() => import("./pages/PublicProfile"));
 const ShareView = lazy(() => import("./pages/ShareView"));
+const Stats = lazy(() => import("./pages/Stats"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -69,6 +70,7 @@ const App = () => (
                     <Route path="/calendar" element={<ErrorBoundary><Calendar /></ErrorBoundary>} />
                     <Route path="/b/:id" element={<ErrorBoundary><BookmarkDetail /></ErrorBoundary>} />
                     <Route path="/settings" element={<ErrorBoundary><Settings /></ErrorBoundary>} />
+                    <Route path="/stats" element={<ErrorBoundary><Stats /></ErrorBoundary>} />
                   </Route>
                   {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                   <Route path="*" element={<ErrorBoundary><NotFound /></ErrorBoundary>} />
