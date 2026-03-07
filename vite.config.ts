@@ -15,26 +15,36 @@ export default defineConfig(({ mode }) => ({
     mode === "development" && componentTagger(),
     VitePWA({
       registerType: "autoUpdate",
-      // Manifest defined inline; this overrides public/manifest.json if present
       manifest: {
-        name: "Watchlist Wonders",
-        short_name: "Watchlist",
-        description: "Your personal watchlist for movies, shows, and videos",
-        theme_color: "#0f0f0f",
-        background_color: "#0f0f0f",
+        name: "WatchMarks - Your Streaming Companion",
+        short_name: "WatchMarks",
+        description:
+          "Save links from any streaming platform, organize your watchlist, and never forget what to watch next.",
+        theme_color: "#dc2626",
+        background_color: "#0a0a0a",
         display: "standalone",
         start_url: "/",
         icons: [
-          { src: "/favicon.ico", sizes: "64x64", type: "image/x-icon" },
-          { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
-          { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
+          {
+            src: "/favicon.png",
+            sizes: "192x192",
+            type: "image/png",
+            purpose: "any maskable",
+          },
+          {
+            src: "/favicon.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "any maskable",
+          },
         ],
       },
       workbox: {
+        cleanupOutdatedCaches: true,
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         runtimeCaching: [
           {
-            // Firestore REST API — network-first, 3s timeout
+            // Firestore REST API: network-first, 3s timeout
             urlPattern: /^https:\/\/firestore\.googleapis\.com\//,
             handler: "NetworkFirst",
             options: {
@@ -44,7 +54,7 @@ export default defineConfig(({ mode }) => ({
             },
           },
           {
-            // Firebase Storage — cache-first, 7 days
+            // Firebase Storage: cache-first, 7 days
             urlPattern: /^https:\/\/firebasestorage\.googleapis\.com\//,
             handler: "CacheFirst",
             options: {
@@ -53,7 +63,7 @@ export default defineConfig(({ mode }) => ({
             },
           },
           {
-            // TMDB images — cache-first, 30 days
+            // TMDB images: cache-first, 30 days
             urlPattern: /^https:\/\/image\.tmdb\.org\//,
             handler: "CacheFirst",
             options: {

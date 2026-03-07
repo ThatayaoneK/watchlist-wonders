@@ -11,21 +11,10 @@ import { format, subDays, subMonths, startOfDay, parseISO, isValid } from "date-
 const Stats = () => {
   const navigate = useNavigate();
 
-  const { data: bookmarks = [], isLoading, isError, error } = useQuery({
+  const { data: bookmarks = [], isLoading, isError } = useQuery({
     queryKey: ["bookmarks"],
     queryFn: () => bookmarkService.getBookmarks(),
   });
-
-  if (isError) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-foreground font-medium">Failed to load stats</p>
-          <p className="text-muted-foreground text-sm mt-2">Please try again later</p>
-        </div>
-      </div>
-    );
-  }
 
   const stats = useMemo(() => {
     const done = bookmarks.filter((b) => b.status === "done");
@@ -145,6 +134,16 @@ const Stats = () => {
     );
   }
 
+  if (isError) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-foreground font-medium">Failed to load stats</p>
+          <p className="text-muted-foreground text-sm mt-2">Please try again later</p>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="min-h-screen bg-background pb-24 md:pb-8">
       {/* Header */}
@@ -296,3 +295,4 @@ const Stats = () => {
 };
 
 export default Stats;
+

@@ -64,7 +64,7 @@ async function withRetry<T>(
       if (error.message.includes('429')) {
         enrichmentError.code = 'RATE_LIMITED';
         enrichmentError.message = 'API rate limit exceeded';
-      } else if (error.message.includes('timeout') || error.message.includes('aborted') || (error as any).name === 'AbortError') {
+      } else if (error.message.includes('timeout') || error.message.includes('aborted') || error.name === 'AbortError') {
         enrichmentError.code = 'TIMEOUT';
         enrichmentError.message = 'API request timed out';
       } else if (error.message.includes('network') || error.message.includes('fetch')) {
@@ -163,12 +163,12 @@ async function fetchOpenGraphMetadata(url: string): Promise<SocialMediaResult | 
     const extractOGValue = (prop: string): string | null => {
       // Try property first, content second (most common order)
       const regex1 = new RegExp(
-        `<meta\\s+property=["\']og:${prop}["\']\\s+content=["\']([^"']+)["\']`,
+        `<meta\\s+property=["']og:${prop}["']\\s+content=["']([^"']+)["']`,
         'i'
       );
       // Try content first, property second (alternate order)
       const regex2 = new RegExp(
-        `<meta\\s+content=["\']([^"']+)["\']\\s+property=["\']og:${prop}["\']`,
+        `<meta\\s+content=["']([^"']+)["']\\s+property=["']og:${prop}["']`,
         'i'
       );
       
@@ -194,8 +194,6 @@ async function fetchOpenGraphMetadata(url: string): Promise<SocialMediaResult | 
       title: title || null,
       description: description || null,
       thumbnail_url: image || null,
-      description: descriptionMatch?.[1] || null,
-      thumbnail_url: imageMatch?.[1] || null,
       source: 'opengraph',
     };
 
@@ -415,3 +413,4 @@ export function validateApiConfiguration(): {
     errors,
   };
 }
+
