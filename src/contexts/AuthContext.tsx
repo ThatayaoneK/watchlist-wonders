@@ -26,11 +26,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      setUser(firebaseUser);
+    // Avoid permanent loading state if auth bootstrap errors or hangs.
+    const authInitTimeout = window.setTimeout(() => {
+      console.error('[Auth] Timed out waiting for Firebase auth initialization.');
       setLoading(false);
-    });
-    return unsubscribe;
+    }, 8000);
+
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      (firebaseUser) => {
+        window.clearTimeout(authInitTimeout);
+        setUser(firebaseUser);
+        setLoading(false);
+      },
+      (error) => {
+        window.clearTimeout(authInitTimeout);
+        console.error('[Auth] Firebase auth initialization failed:', error);
+        setUser(null);
+        setLoading(false);
+      },
+    );
+
+    return () => {
+      window.clearTimeout(authInitTimeout);
+      unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {

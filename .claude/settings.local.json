@@ -16,7 +16,11 @@
       "Bash(ls ./*.rules)",
       "Bash(grep -r \"queryKey\\\\|queryFn\" ./src/pages/*.tsx)",
       "WebFetch(domain:microlink.io)",
-      "WebFetch(domain:iframely.com)"
+      "WebFetch(domain:iframely.com)",
+      "WebFetch(domain:growth.design)",
+      "WebSearch",
+      "WebFetch(domain:medium.com)",
+      "WebFetch(domain:riseverse.com)"
     ]
   }
 }
