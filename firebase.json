@@ -3,6 +3,12 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
+  "storage": [
+    {
+      "bucket": "watch-wonders.appspot.com",
+      "rules": "storage.rules"
+    }
+  ],
   "functions": [
     {
       "source": "functions",
