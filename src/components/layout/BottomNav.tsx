@@ -7,11 +7,6 @@ interface BottomNavProps {
   onAddClick?: () => void;
 }
 
-const NAV_ITEMS = [
-  { href: "/dashboard", icon: Home,     label: "Home" },
-  { href: "/calendar",  icon: Calendar, label: "Calendar" },
-];
-
 export function BottomNav({ onSearchClick, onAddClick }: BottomNavProps) {
   const location = useLocation();
 
