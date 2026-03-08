@@ -58,6 +58,25 @@ const Stats = () => {
       ? ratedBookmarks.reduce((sum, b) => sum + (b.user_rating || 0), 0) / ratedBookmarks.length
       : null;
 
+    // Ratings distribution (1–5 stars)
+    const ratingsBuckets: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    bookmarks.forEach((b) => {
+      if (b.user_rating && b.user_rating >= 1 && b.user_rating <= 5) {
+        ratingsBuckets[Math.round(b.user_rating)]++;
+      }
+    });
+    const maxRatingCount = Math.max(...Object.values(ratingsBuckets), 1);
+
+    // Watched With breakdown
+    const watchedWithCounts: Record<string, number> = { Solo: 0, Partner: 0, Friends: 0, Family: 0 };
+    bookmarks.forEach((b) => {
+      const w = b.metadata?.watched_with;
+      if (typeof w === "string" && w in watchedWithCounts) {
+        watchedWithCounts[w]++;
+      }
+    });
+    const hasWatchedWithData = Object.values(watchedWithCounts).some((v) => v > 0);
+
     // Monthly activity (last 12 months) — uses watched_at if available
     const monthlyActivity: Record<string, number> = {};
     for (let i = 11; i >= 0; i--) {
@@ -104,6 +123,15 @@ const Stats = () => {
       }
     }
 
+    // Best month (highest activity)
+    const bestMonth = monthlyData.reduce<string>(
+      (best, [month, count]) => {
+        const bestCount = monthlyActivity[best] ?? 0;
+        return count > bestCount ? month : best;
+      },
+      monthlyData[0]?.[0] ?? ""
+    );
+
     return {
       total: bookmarks.length,
       done: done.length,
@@ -120,8 +148,13 @@ const Stats = () => {
       maxMood,
       avgRating,
       ratedCount: ratedBookmarks.length,
+      ratingsBuckets,
+      maxRatingCount,
+      watchedWithCounts,
+      hasWatchedWithData,
       monthlyData,
       maxMonthly,
+      bestMonth,
       streak,
     };
   }, [bookmarks]);
@@ -222,18 +255,24 @@ const Stats = () => {
         {/* Monthly activity */}
         <div className="bg-card border border-border rounded-xl p-5">
           <h2 className="font-semibold mb-4">Monthly Activity (Watched)</h2>
-          <div className="flex items-end gap-1 h-24">
-            {stats.monthlyData.map(([month, count]) => (
-              <div key={month} className="flex-1 flex flex-col items-center gap-1">
-                <div className="w-full flex items-end justify-center" style={{ height: "80px" }}>
-                  <div
-                    className="w-full bg-primary/80 rounded-t-sm transition-all"
-                    style={{ height: `${(count / stats.maxMonthly) * 80}px`, minHeight: count > 0 ? "4px" : "0" }}
-                  />
+          <div className="flex items-end gap-1 h-28">
+            {stats.monthlyData.map(([month, count]) => {
+              const isBest = month === stats.bestMonth && count > 0;
+              return (
+                <div key={month} className="flex-1 flex flex-col items-center gap-1">
+                  {isBest && (
+                    <span className="text-[8px] text-wm-gold font-semibold leading-none mb-0.5">Best</span>
+                  )}
+                  <div className="w-full flex items-end justify-center" style={{ height: "80px" }}>
+                    <div
+                      className={`w-full rounded-t-sm transition-all ${isBest ? "bg-wm-gold/90" : "bg-primary/80"}`}
+                      style={{ height: `${(count / stats.maxMonthly) * 80}px`, minHeight: count > 0 ? "4px" : "0" }}
+                    />
+                  </div>
+                  <span className="text-[9px] text-muted-foreground truncate w-full text-center">{month.slice(5)}</span>
                 </div>
-                <span className="text-[9px] text-muted-foreground">{month}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -285,6 +324,51 @@ const Stats = () => {
                 <p className="text-2xl font-bold">{stats.avgRating.toFixed(1)}<span className="text-muted-foreground text-sm font-normal"> / 5</span></p>
                 <p className="text-xs text-muted-foreground">Average rating across {stats.ratedCount} title{stats.ratedCount !== 1 ? "s" : ""}</p>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Ratings distribution */}
+        {stats.ratedCount > 0 && (
+          <div className="bg-card border border-border rounded-xl p-5">
+            <h2 className="font-semibold mb-4 flex items-center gap-2">
+              <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
+              Ratings Breakdown
+            </h2>
+            <div className="space-y-2">
+              {([5, 4, 3, 2, 1] as const).map((star) => (
+                <div key={star} className="flex items-center gap-3">
+                  <span className="text-xs w-8 text-muted-foreground text-right">{star}★</span>
+                  <div className="flex-1 bg-secondary rounded-full h-2 overflow-hidden">
+                    <div
+                      className="h-full bg-yellow-400/80 rounded-full transition-all"
+                      style={{ width: `${(stats.ratingsBuckets[star] / stats.maxRatingCount) * 100}%` }}
+                    />
+                  </div>
+                  <span className="text-xs w-4 text-right font-medium text-muted-foreground">
+                    {stats.ratingsBuckets[star]}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Watched With */}
+        {stats.hasWatchedWithData && (
+          <div className="bg-card border border-border rounded-xl p-5">
+            <h2 className="font-semibold mb-4">Watched With</h2>
+            <div className="grid grid-cols-4 gap-2 text-center">
+              {(["Solo", "Partner", "Friends", "Family"] as const).map((label) => {
+                const emojis: Record<string, string> = { Solo: "🧍", Partner: "👫", Friends: "👥", Family: "👨‍👩‍👧" };
+                return (
+                  <div key={label} className="space-y-1">
+                    <p className="text-xl">{emojis[label]}</p>
+                    <p className="text-lg font-bold">{stats.watchedWithCounts[label]}</p>
+                    <p className="text-[10px] text-muted-foreground">{label}</p>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

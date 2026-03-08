@@ -104,6 +104,7 @@ export function ScheduleDialog({ bookmark, open, onOpenChange, onScheduled }: Sc
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['schedules'] });
+      queryClient.invalidateQueries({ queryKey: ['schedules', 'upcoming'] });
       onOpenChange(false);
       onScheduled?.();
       const recurrenceLabel = recurrence !== 'none' ? ` (+ 3 more ${recurrence})` : '';
@@ -113,9 +114,13 @@ export function ScheduleDialog({ bookmark, open, onOpenChange, onScheduled }: Sc
       });
     },
     onError: (error: any) => {
+      // Surface our own validation messages; use a safe fallback for Firestore errors (which carry error.code)
+      const description = !error.code && error.message
+        ? error.message
+        : "Could not create the schedule. Please try again.";
       toast({
         title: "Error scheduling",
-        description: error.message || "Something went wrong.",
+        description,
         variant: "destructive",
       });
     },

@@ -46,11 +46,11 @@ const PageLoader = () => (
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
-      <NotificationListenerMount />
       <TooltipProvider>
         <Toaster />
         <Sonner />
         <BrowserRouter>
+          <NotificationListenerMount />
           <div className="dark">
             <PageTransition>
               <Suspense fallback={<PageLoader />}>

@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { Play, Plus, Check, CalendarPlus, MoreHorizontal, ExternalLink, Trash2, Undo2, Eye } from "lucide-react";
+import { Play, Plus, Check, CalendarPlus, MoreHorizontal, ExternalLink, Trash2, Undo2, Eye, BookMarked, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,6 +25,8 @@ interface PosterCardProps {
   onDelete?: () => void;
   onUndoDone?: () => void;
   onSetWatching?: () => void;
+  onStatusCycle?: (bookmark: Bookmark, newStatus: Bookmark["status"]) => void;
+  onEpisodeUpdate?: (bookmark: Bookmark, count: number) => void;
   variant?: "poster" | "backdrop";
   className?: string;
   isSelectable?: boolean;
@@ -80,6 +83,14 @@ function isNewBookmark(createdAt: string) {
   const now = new Date();
   return now.getTime() - created.getTime() < 24 * 60 * 60 * 1000;
 }
+
+const STATUS_CYCLE: Record<string, Bookmark["status"]> = {
+  backlog: "watching",
+  watching: "done",
+  done: "backlog",
+  scheduled: "watching",
+  dropped: "backlog",
+};
 
 const trailerUrlCache = new Map<string, string | null>();
 
@@ -200,6 +211,8 @@ export function PosterCard({
   onDelete,
   onUndoDone,
   onSetWatching,
+  onStatusCycle,
+  onEpisodeUpdate,
   variant = "poster",
   className,
   isSelectable,
@@ -212,6 +225,8 @@ export function PosterCard({
   const [imageError, setImageError] = useState(false);
   const [quickScheduleOpen, setQuickScheduleOpen] = useState(false);
   const [trailerUrl, setTrailerUrl] = useState<string | null>(() => getBookmarkTrailerUrl(bookmark));
+  const [episodePopoverOpen, setEpisodePopoverOpen] = useState(false);
+  const [localEpisodeCount, setLocalEpisodeCount] = useState(0);
   const cardRef = useRef<HTMLAnchorElement>(null);
 
   const imageUrl =
@@ -264,6 +279,27 @@ export function PosterCard({
     MOOD_COLOR[mood.toLowerCase()] || "bg-muted text-muted-foreground";
 
   const isNew = isNewBookmark(bookmark.created_at);
+
+  // Episode tracking (series in watching status)
+  const episodesWatched = typeof bookmark.metadata?.episodes_watched === "number" ? bookmark.metadata.episodes_watched : 0;
+  const totalEpisodes = typeof bookmark.metadata?.total_episodes === "number" ? bookmark.metadata.total_episodes : null;
+  const showEpisodeBar = bookmark.type === "series" && bookmark.status === "watching";
+  const episodeProgress = totalEpisodes ? (episodesWatched / totalEpisodes) * 100 : 0;
+
+  const handleStatusPillClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!onStatusCycle) return;
+    const next = STATUS_CYCLE[bookmark.status] ?? "backlog";
+    onStatusCycle(bookmark, next);
+  };
+
+  const handleEpisodeUpdate = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onEpisodeUpdate?.(bookmark, localEpisodeCount);
+    setEpisodePopoverOpen(false);
+  };
   const isPreviewActive =
     !isMobile &&
     !isSelectable &&
@@ -273,6 +309,10 @@ export function PosterCard({
   useEffect(() => {
     setTrailerUrl(getBookmarkTrailerUrl(bookmark));
   }, [bookmark.id, bookmark.source_url, bookmark.metadata]);
+
+  useEffect(() => {
+    setLocalEpisodeCount(episodesWatched);
+  }, [episodesWatched]);
 
   useEffect(() => {
     if (!isPreviewActive || trailerUrl) return;
@@ -384,8 +424,8 @@ export function PosterCard({
             </div>
           )}
 
-          {/* Status badge — Watching */}
-          {!isSelectable && bookmark.status === "watching" && !isNew && (
+          {/* Status badge — Watching (only shown when no status pill is available) */}
+          {!isSelectable && !onStatusCycle && bookmark.status === "watching" && !isNew && (
             <div className="absolute top-2 right-2">
               <span className="flex items-center gap-1 text-[9px] font-bold bg-primary/90 text-primary-foreground px-1.5 py-0.5 rounded">
                 <span className="w-1.5 h-1.5 bg-primary-foreground rounded-full animate-pulse" />
@@ -410,6 +450,86 @@ export function PosterCard({
             </div>
           )}
 
+          {/* One-tap status pill (bottom-left) — only when onStatusCycle provided and not in select mode */}
+          {onStatusCycle && !isSelectable && (
+            <button
+              type="button"
+              onClick={handleStatusPillClick}
+              className={cn(
+                "absolute bottom-2 left-2 z-20 flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold transition-opacity",
+                bookmark.status === "watching"
+                  ? "bg-primary/90 text-primary-foreground"
+                  : bookmark.status === "done"
+                  ? "bg-emerald-600/90 text-white"
+                  : "bg-background/80 text-muted-foreground backdrop-blur-sm"
+              )}
+              aria-label={`Status: ${bookmark.status}. Click to advance.`}
+            >
+              {bookmark.status === "watching" && (
+                <>
+                  <span className="w-1.5 h-1.5 bg-primary-foreground rounded-full animate-pulse" />
+                  Watching
+                </>
+              )}
+              {bookmark.status === "done" && (
+                <>
+                  <Check className="w-2.5 h-2.5" />
+                  Done
+                </>
+              )}
+              {(bookmark.status === "backlog" || bookmark.status === "scheduled" || bookmark.status === "dropped") && (
+                <>
+                  <BookMarked className="w-2.5 h-2.5" />
+                  {bookmark.status === "backlog" ? "Backlog" : bookmark.status === "scheduled" ? "Scheduled" : "Dropped"}
+                </>
+              )}
+            </button>
+          )}
+
+          {/* Episode progress bar (series in watching) */}
+          {showEpisodeBar && !isSelectable && (
+            <Popover open={episodePopoverOpen} onOpenChange={setEpisodePopoverOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setEpisodePopoverOpen(true); }}
+                  className="absolute bottom-0 left-0 right-0 h-1.5 bg-background/40 z-20 cursor-pointer hover:h-2 transition-all"
+                  aria-label="Episode progress"
+                >
+                  <div
+                    className="h-full bg-primary rounded-tr-full"
+                    style={{ width: `${Math.min(episodeProgress, 100)}%`, minWidth: episodesWatched > 0 ? "4px" : "0" }}
+                  />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent side="top" className="w-48 p-3" onClick={(e) => e.stopPropagation()}>
+                <p className="text-xs font-medium mb-2">Episodes watched</p>
+                <div className="flex items-center gap-2 mb-3">
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setLocalEpisodeCount((c) => Math.max(0, c - 1)); }}
+                    className="w-7 h-7 rounded-full bg-secondary flex items-center justify-center hover:bg-secondary/80"
+                  >
+                    <Minus className="w-3 h-3" />
+                  </button>
+                  <span className="flex-1 text-center font-semibold text-sm">
+                    {localEpisodeCount}{totalEpisodes ? `/${totalEpisodes}` : ""}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setLocalEpisodeCount((c) => c + 1); }}
+                    className="w-7 h-7 rounded-full bg-secondary flex items-center justify-center hover:bg-secondary/80"
+                  >
+                    <Plus className="w-3 h-3" />
+                  </button>
+                </div>
+                <Button size="sm" className="w-full text-xs" onClick={handleEpisodeUpdate}>
+                  Update
+                </Button>
+              </PopoverContent>
+            </Popover>
+          )}
+
           {/* Hover overlay */}
           <div
             className={cn(
@@ -420,13 +540,13 @@ export function PosterCard({
 
           {/* Mobile persistent action button — always visible, no hover required */}
           {isMobile && !isSelectable && (
-            <div className="absolute bottom-8 right-1.5 z-20">
+            <div className="absolute bottom-10 right-1.5 z-20">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
                     variant="secondary"
                     size="icon"
-                    className="h-7 w-7 rounded-full bg-background/80 backdrop-blur-sm"
+                    className="h-10 w-10 rounded-full bg-background/80 backdrop-blur-sm"
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
                     aria-label="More options"
                   >
@@ -578,17 +698,6 @@ export function PosterCard({
               <span className={cn("text-[9px] px-1.5 py-0.5 rounded-full font-medium", moodColor(bookmark.mood_tags[0]))}>
                 {bookmark.mood_tags[0]}
               </span>
-            )}
-            {/* "Schedule" pill on backlog cards — subtle CTA */}
-            {!isSelectable && bookmark.status === "backlog" && (
-              <button
-                type="button"
-                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setQuickScheduleOpen(true); }}
-                className="text-[9px] text-muted-foreground/60 hover:text-primary flex items-center gap-0.5 transition-colors"
-                title="Schedule this"
-              >
-                <CalendarPlus className="w-2.5 h-2.5" />
-              </button>
             )}
           </div>
         </div>

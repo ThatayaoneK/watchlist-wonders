@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAvatar } from "@/hooks/useAvatar";
 import { useToast } from "@/hooks/use-toast";
+import { useWatchStreak } from "@/hooks/useWatchStreak";
 import { QuickAddBar } from "@/components/QuickAddBar";
 import { BottomNav } from "@/components/layout/BottomNav";
 
@@ -22,6 +23,7 @@ export function TopNav({ notificationCount = 0, onSearchClick }: TopNavProps) {
   const location = useLocation();
   const { user, signOut } = useAuth();
   const { avatarUrl } = useAvatar();
+  const { streak } = useWatchStreak();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -136,6 +138,31 @@ export function TopNav({ notificationCount = 0, onSearchClick }: TopNavProps) {
                   </div>
                 </PopoverContent>
               </Popover>
+
+              {/* Streak indicator */}
+              {user && streak >= 2 && (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="gap-1 text-orange-500 font-bold px-2 hover:text-orange-400"
+                      aria-label={`${streak} day watch streak`}
+                    >
+                      🔥 {streak}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-56 p-4">
+                    <p className="font-semibold text-sm mb-1">🔥 {streak}-day streak!</p>
+                    <p className="text-xs text-muted-foreground">
+                      You've watched something {streak} days in a row. Keep it up!
+                    </p>
+                    <Link to="/stats" className="text-xs text-primary hover:underline block mt-3">
+                      View your stats →
+                    </Link>
+                  </PopoverContent>
+                </Popover>
+              )}
 
               {/* Notifications */}
               <Link to="/notifications" className="relative">

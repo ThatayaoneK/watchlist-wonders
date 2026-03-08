@@ -34,6 +34,8 @@ const MOOD_OPTIONS = [
   "uplifting", "dark", "quirky", "epic", "emotional", "fun", "educational"
 ];
 
+const MOOD_DEFAULT_VISIBLE = 9; // Hick's Law: show fewer to start
+
 const TYPE_OPTIONS: { value: Bookmark["type"]; label: string; icon: React.ElementType }[] = [
   { value: "movie",   label: "Movie",    icon: Film },
   { value: "series",  label: "Series",   icon: Tv },
@@ -95,6 +97,7 @@ const NewBookmark = () => {
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [moreOptionsOpen, setMoreOptionsOpen] = useState(false);
+  const [showAllMoods, setShowAllMoods] = useState(false);
 
   // Duplicate detection
   const { data: allBookmarks = [] } = useQuery({
@@ -175,15 +178,6 @@ const NewBookmark = () => {
 
     autoFetchedUrlRef.current = trimmed;
     setEnrichError(null);
-    const enrichUrl = import.meta.env.VITE_ENRICH_URL;
-
-    if (!enrichUrl) {
-      const dp = detectProvider(trimmed);
-      setConfirmInitial({ url: trimmed, provider: dp, type: dp === "youtube" ? "video" : "movie" });
-      setConfirmOpen(true);
-      return;
-    }
-
     setIsEnriching(true);
     const dp = detectProvider(trimmed);
     setProvider(dp);
@@ -314,18 +308,25 @@ const NewBookmark = () => {
           </div>
 
           {/* Platform icons */}
-          <div className="flex items-center justify-center gap-2 mb-8">
+          <div className="flex items-center justify-center gap-3 mb-8">
             {Object.entries(PROVIDER_COLORS).filter(([k]) => k !== "generic").map(([key, color]) => (
-              <div
-                key={key}
-                title={PROVIDER_LABELS[key]}
-                className={cn(
-                  "w-8 h-8 rounded-full text-[10px] font-bold text-white flex items-center justify-center transition-all",
-                  color,
-                  detectedProvider === key ? "scale-125 ring-2 ring-white ring-offset-2 ring-offset-background" : "opacity-60"
-                )}
-              >
-                {PROVIDER_LABELS[key].charAt(0)}
+              <div key={key} className="flex flex-col items-center gap-1">
+                <div
+                  title={PROVIDER_LABELS[key]}
+                  className={cn(
+                    "w-9 h-9 rounded-full text-[10px] font-bold text-white flex items-center justify-center transition-all",
+                    color,
+                    detectedProvider === key ? "scale-125 ring-2 ring-white ring-offset-2 ring-offset-background" : "opacity-50"
+                  )}
+                >
+                  {PROVIDER_LABELS[key].slice(0, 2)}
+                </div>
+                <span className={cn(
+                  "text-[9px] font-medium transition-opacity",
+                  detectedProvider === key ? "text-foreground" : "text-muted-foreground/50"
+                )}>
+                  {PROVIDER_LABELS[key].split(" ")[0].slice(0, 4)}
+                </span>
               </div>
             ))}
           </div>
@@ -345,14 +346,30 @@ const NewBookmark = () => {
               />
             </div>
 
-            {detectedProvider && url.trim() && (
+            {/* Inline feedback — detected provider OR error (mutually exclusive) */}
+            {enrichError ? (
+              <p className="text-xs text-destructive px-1">{enrichError}</p>
+            ) : detectedProvider && url.trim() ? (
               <p className="text-xs text-muted-foreground px-1">
                 ✓ <span className="text-foreground font-medium">{PROVIDER_LABELS[detectedProvider]}</span> link detected
               </p>
-            )}
+            ) : null}
 
-            {enrichError && (
-              <p className="text-xs text-destructive px-1">{enrichError}</p>
+            {/* Loading skeleton — appears right here, close to where the user is looking */}
+            {isEnriching && (
+              <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
+                <div className="flex gap-2">
+                  <div className="h-3 bg-muted rounded animate-pulse flex-1" />
+                  <div className="h-3 bg-muted rounded animate-pulse w-1/4" />
+                </div>
+                <div className="flex gap-2">
+                  <div className="h-3 bg-muted rounded animate-pulse w-2/5" />
+                  <div className="h-3 bg-muted rounded animate-pulse flex-1" />
+                </div>
+                <p className="text-xs text-muted-foreground pt-1">
+                  Fetching details from {detectedProvider ? PROVIDER_LABELS[detectedProvider] : "the link"}…
+                </p>
+              </div>
             )}
 
             <Button
@@ -367,23 +384,6 @@ const NewBookmark = () => {
               )}
             </Button>
           </div>
-
-          {/* Loading state message */}
-          {isEnriching && (
-            <div className="mt-6 text-center space-y-3">
-              <div className="flex gap-2 mx-auto max-w-xs">
-                <div className="h-3 bg-muted rounded animate-pulse flex-1" />
-                <div className="h-3 bg-muted rounded animate-pulse w-1/3" />
-              </div>
-              <div className="flex gap-2 mx-auto max-w-xs">
-                <div className="h-3 bg-muted rounded animate-pulse w-1/2" />
-                <div className="h-3 bg-muted rounded animate-pulse flex-1" />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Fetching details from {detectedProvider ? PROVIDER_LABELS[detectedProvider] : "the link"}…
-              </p>
-            </div>
-          )}
 
           {/* Manual add option */}
           <div className="mt-8 text-center">
@@ -409,29 +409,14 @@ const NewBookmark = () => {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="sticky top-0 z-40 bg-background/95 backdrop-blur border-b border-border">
-        <div className="container mx-auto px-4 lg:px-8 flex items-center justify-between h-16">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => setStep("paste")}>
-              <ArrowLeft className="w-5 h-5" />
-            </Button>
-            <div>
-              <h1 className="text-xl font-semibold">Confirm Details</h1>
-              <p className="text-xs text-muted-foreground">Step 2 of 2 — Confirm & save</p>
-            </div>
-          </div>
-          <Button
-            type="submit"
-            form="bookmark-form"
-            disabled={createBookmarkMutation.isPending || !title.trim()}
-            className="gap-2"
-          >
-            {createBookmarkMutation.isPending ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                {uploadProgress > 0 ? `Uploading ${uploadProgress}/${attachments.length}…` : "Saving…"}
-              </>
-            ) : "Save to Watchlist"}
+        <div className="container mx-auto px-4 lg:px-8 flex items-center gap-4 h-16">
+          <Button variant="ghost" size="icon" onClick={() => setStep("paste")}>
+            <ArrowLeft className="w-5 h-5" />
           </Button>
+          <div>
+            <h1 className="text-xl font-semibold">Confirm Details</h1>
+            <p className="text-xs text-muted-foreground">Step 2 of 2 — Confirm & save</p>
+          </div>
         </div>
       </div>
 
@@ -473,18 +458,6 @@ const NewBookmark = () => {
                 {provider && provider !== "generic" && (
                   <div className={cn("absolute top-2 left-2 w-3 h-3 rounded-full", PROVIDER_COLORS[provider])} />
                 )}
-              </div>
-
-              {/* Poster URL field (compact) */}
-              <div className="w-full space-y-1">
-                <Label className="text-xs text-muted-foreground">Poster URL</Label>
-                <Input
-                  type="url"
-                  placeholder="https://…"
-                  value={posterUrl}
-                  onChange={(e) => setPosterUrl(e.target.value)}
-                  className="h-8 text-xs"
-                />
               </div>
             </div>
 
@@ -550,11 +523,11 @@ const NewBookmark = () => {
                 </div>
               </div>
 
-              {/* Mood tags */}
+              {/* Mood tags — Hick's Law: show subset by default */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Mood Tags</Label>
                 <div className="flex flex-wrap gap-1.5">
-                  {MOOD_OPTIONS.map((mood) => (
+                  {(showAllMoods ? MOOD_OPTIONS : MOOD_OPTIONS.slice(0, MOOD_DEFAULT_VISIBLE)).map((mood) => (
                     <Badge
                       key={mood}
                       variant={selectedMoods.includes(mood) ? "default" : "outline"}
@@ -564,7 +537,17 @@ const NewBookmark = () => {
                       {getMoodEmoji(mood)} {mood}
                     </Badge>
                   ))}
+                  <Badge
+                    variant="outline"
+                    className="cursor-pointer select-none text-xs text-muted-foreground border-dashed transition-colors hover:border-solid"
+                    onClick={() => setShowAllMoods((v) => !v)}
+                  >
+                    {showAllMoods ? "Show less" : `+${MOOD_OPTIONS.length - MOOD_DEFAULT_VISIBLE} more`}
+                  </Badge>
                 </div>
+                {selectedMoods.length > 0 && (
+                  <p className="text-xs text-muted-foreground">{selectedMoods.length} selected</p>
+                )}
               </div>
 
               {/* Notes */}
@@ -589,6 +572,18 @@ const NewBookmark = () => {
                   </Button>
                 </CollapsibleTrigger>
                 <CollapsibleContent className="space-y-4 mt-3">
+                  {/* Poster URL (hidden from main view — power user option) */}
+                  <div className="space-y-1.5">
+                    <Label className="text-sm">Poster URL</Label>
+                    <Input
+                      type="url"
+                      placeholder="https://…"
+                      value={posterUrl}
+                      onChange={(e) => setPosterUrl(e.target.value)}
+                      className="h-9 text-sm"
+                    />
+                  </div>
+
                   {/* Custom tags */}
                   <div className="space-y-2">
                     <Label className="text-sm">Custom Tags</Label>
@@ -600,10 +595,11 @@ const NewBookmark = () => {
                           value={tagInput}
                           onChange={(e) => setTagInput(e.target.value)}
                           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddTag(); } }}
-                          className="pl-9 h-9 text-sm"
+                          className="pl-9 h-10 text-sm"
                         />
                       </div>
-                      <Button type="button" variant="secondary" size="icon" className="h-9 w-9" onClick={handleAddTag}>
+                      {/* Fitts's Law: ≥44px touch target */}
+                      <Button type="button" variant="secondary" size="icon" className="h-11 w-11 shrink-0" onClick={handleAddTag}>
                         <Plus className="w-4 h-4" />
                       </Button>
                     </div>
@@ -659,6 +655,24 @@ const NewBookmark = () => {
             </div>
           </div>
         </form>
+
+        {/* Sticky bottom CTA — Fitts's Law: put the primary action where the user's eye ends up */}
+        <div className="sticky bottom-0 left-0 right-0 mt-8 py-4 bg-background/95 backdrop-blur border-t border-border">
+          <Button
+            type="submit"
+            form="bookmark-form"
+            size="lg"
+            className="w-full h-12 text-base gap-2"
+            disabled={createBookmarkMutation.isPending || !title.trim()}
+          >
+            {createBookmarkMutation.isPending ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                {uploadProgress > 0 ? `Uploading ${uploadProgress}/${attachments.length}…` : "Saving…"}
+              </>
+            ) : "Save to Watchlist"}
+          </Button>
+        </div>
       </div>
 
       <ConfirmMetadataDialog

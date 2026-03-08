@@ -46,7 +46,7 @@ const ShareView = () => {
     onError: (err: any) => {
       toast({
         title: "Could not save",
-        description: err.message,
+        description: "Could not save to your watchlist. Please try again.",
         variant: "destructive",
       });
     },

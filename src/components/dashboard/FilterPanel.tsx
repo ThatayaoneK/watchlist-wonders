@@ -163,7 +163,6 @@ export function FilterPanel({ onApply, onReset, className }: FilterPanelProps) {
 
         {/* Actions */}
         <div className="flex justify-end gap-2 pt-1">
-          <Button variant="ghost" onClick={handleReset}>Reset</Button>
           <Button onClick={handleApply}>Apply Filters</Button>
         </div>
       </div>

@@ -16,7 +16,10 @@ interface RailProps {
   onDelete?: (bookmark: Bookmark) => void;
   onUndoDone?: (bookmark: Bookmark) => void;
   onSetWatching?: (bookmark: Bookmark) => void;
+  onStatusCycle?: (bookmark: Bookmark, newStatus: Bookmark["status"]) => void;
+  onEpisodeUpdate?: (bookmark: Bookmark, count: number) => void;
   emptyMessage?: string;
+  emptyState?: React.ReactNode;
   className?: string;
   isSelectable?: boolean;
   selectedIds?: Set<string>;
@@ -34,7 +37,10 @@ export function Rail({
   onDelete,
   onUndoDone,
   onSetWatching,
+  onStatusCycle,
+  onEpisodeUpdate,
   emptyMessage = "No items yet",
+  emptyState,
   className,
   isSelectable,
   selectedIds,
@@ -62,6 +68,8 @@ export function Rail({
   };
 
   if (bookmarks.length === 0) {
+    if (emptyState) return <>{emptyState}</>;
+    if (emptyMessage) return <div className="px-4 py-8 text-center text-muted-foreground">{emptyMessage}</div>;
     return null;
   }
 
@@ -128,6 +136,8 @@ export function Rail({
               onDelete={() => onDelete?.(bookmark)}
               onUndoDone={() => onUndoDone?.(bookmark)}
               onSetWatching={() => onSetWatching?.(bookmark)}
+              onStatusCycle={onStatusCycle}
+              onEpisodeUpdate={onEpisodeUpdate}
               isSelectable={isSelectable}
               isSelected={selectedIds?.has(bookmark.id)}
               onSelect={() => onSelect?.(bookmark.id)}

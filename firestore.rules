@@ -11,10 +11,10 @@ service cloud.firestore {
       allow read: if resource.data.is_public == true;
     }
 
-    // Feed items — owner can read their own feed
+    // Feed items — owner can read their own feed; writes restricted to Cloud Functions only
     match /feed/{uid}/items/{itemId} {
       allow read: if request.auth != null && request.auth.uid == uid;
-      allow write: if request.auth != null;
+      allow write: if false;
     }
 
     // Public profiles — anyone can read

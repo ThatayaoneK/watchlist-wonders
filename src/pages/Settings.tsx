@@ -130,7 +130,8 @@ const Settings = () => {
       setNewPassword("");
       setConfirmPassword("");
     } catch (error: any) {
-      toast({ title: "Failed to update password", description: error.message || "Please try again.", variant: "destructive" });
+      const msg = error.code === "auth/requires-recent-login" ? "Please sign out and sign back in before changing your password." : "Failed to update password. Please try again.";
+      toast({ title: "Failed to update password", description: msg, variant: "destructive" });
     } finally {
       setPasswordLoading(false);
     }
@@ -153,7 +154,7 @@ const Settings = () => {
         toast({ title: "Push notifications disabled" });
       }
     } catch (err: any) {
-      toast({ title: "Failed to update notifications", description: err.message, variant: "destructive" });
+      toast({ title: "Failed to update notifications", description: "Could not update notification settings. Please try again.", variant: "destructive" });
     } finally {
       setPushLoading(false);
     }
@@ -166,7 +167,7 @@ const Settings = () => {
       await socialService.savePublicProfile({ display_name: displayName || null, bio: bio || null });
       toast({ title: "Profile saved", description: "Your public profile has been updated." });
     } catch (error: any) {
-      toast({ title: "Failed to save profile", description: error.message, variant: "destructive" });
+      toast({ title: "Failed to save profile", description: "Could not save your profile. Please try again.", variant: "destructive" });
     } finally {
       setProfileLoading(false);
     }
@@ -178,7 +179,7 @@ const Settings = () => {
       await authService.resetPassword(user.email);
       toast({ title: "Reset email sent", description: "Check your inbox for a password reset link." });
     } catch (error: any) {
-      toast({ title: "Failed to send reset email", description: error.message || "Please try again.", variant: "destructive" });
+      toast({ title: "Failed to send reset email", description: "Could not send the reset email. Please try again.", variant: "destructive" });
     }
   };
 

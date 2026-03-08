@@ -96,6 +96,7 @@ export function QuickScheduleSheet({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["schedules", "upcoming"] });
       queryClient.invalidateQueries({ queryKey: ["bookmarks"] });
       onOpenChange(false);
       onScheduled?.();

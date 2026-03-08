@@ -74,11 +74,11 @@ const BookmarkDetail = () => {
       refetchAttachments();
       toast({ title: "Attachment deleted" });
     },
-    onError: (error: any) => {
+    onError: () => {
       setDeletingAttachmentId(null);
       toast({
         title: "Failed to delete attachment",
-        description: error.message || "Something went wrong.",
+        description: "Could not delete the attachment. Please try again.",
         variant: "destructive",
       });
     },
@@ -92,7 +92,7 @@ const BookmarkDetail = () => {
       refetchAttachments();
       toast({ title: "Attachment uploaded", description: file.name });
     } catch (err: any) {
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+      toast({ title: "Upload failed", description: "Could not upload the file. Please try again.", variant: "destructive" });
     }
     // Reset file input
     if (attachFileRef.current) attachFileRef.current.value = "";
@@ -112,7 +112,7 @@ const BookmarkDetail = () => {
     onError: (error: any) => {
       toast({
         title: "Error updating bookmark",
-        description: error.message || "Something went wrong.",
+        description: "Could not update the bookmark. Please try again.",
         variant: "destructive",
       });
     },
@@ -141,7 +141,7 @@ const BookmarkDetail = () => {
     onError: (error: any) => {
       toast({
         title: "Failed to share bookmark",
-        description: error.message || "Something went wrong.",
+        description: "Could not create the share link. Please try again.",
         variant: "destructive",
       });
     },
@@ -156,7 +156,7 @@ const BookmarkDetail = () => {
     onError: (error: any) => {
       toast({
         title: "Failed to disable sharing",
-        description: error.message || "Something went wrong.",
+        description: "Could not disable sharing. Please try again.",
         variant: "destructive",
       });
     },
@@ -170,7 +170,7 @@ const BookmarkDetail = () => {
       queryClient.invalidateQueries({ queryKey: ['bookmarks'] });
     },
     onError: (error: any) => {
-      toast({ title: "Failed to save rating", description: error.message, variant: "destructive" });
+      toast({ title: "Failed to save rating", description: "Could not save your rating. Please try again.", variant: "destructive" });
     },
   });
 
@@ -189,7 +189,7 @@ const BookmarkDetail = () => {
       toast({ title: "Added to watchlist", description: newBm.title });
     },
     onError: (error: any) => {
-      toast({ title: "Failed to add", description: error.message, variant: "destructive" });
+      toast({ title: "Failed to add", description: "Could not add to watchlist. Please try again.", variant: "destructive" });
     },
   });
 

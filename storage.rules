@@ -1,0 +1,29 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // User avatars — anyone can read (shown on public profiles); owner can write
+    match /avatars/{uid}/{allPaths=**} {
+      allow read: if true;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+                            && request.resource.size < 5 * 1024 * 1024  // 5 MB limit
+                            && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Bookmark attachments — owner read/write only
+    match /attachments/{uid}/{allPaths=**} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+                            && request.resource.size < 20 * 1024 * 1024  // 20 MB limit
+                            && (request.resource.contentType.matches('image/.*')
+                                || request.resource.contentType == 'application/pdf');
+      allow delete: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Deny everything else
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

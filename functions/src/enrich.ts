@@ -1,4 +1,4 @@
-import { onCall } from 'firebase-functions/v2/https';
+import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import * as logger from 'firebase-functions/logger';
 
@@ -18,15 +18,14 @@ interface EnrichResponse {
   error?: { message: string };
 }
 
-// --- URL Sanitization ---
+// --- URL helpers ---
 
-function sanitizeUrl(url: string): string {
+/** Strip query string and fragment for safe logging (avoids leaking tokens in query params) */
+function redactUrlForLog(url: string): string {
   try {
     const u = new URL(url);
-    // Return URL without query string and fragment
     return `${u.protocol}//${u.host}${u.pathname}`;
   } catch {
-    // If URL parsing fails, return URL as-is
     return url;
   }
 }
@@ -162,8 +161,14 @@ async function fetchOpenGraph(url: string): Promise<Record<string, string>> {
     if (!res.ok) return {};
     const html = await res.text();
     const og: Record<string, string> = {};
-    const matches = html.matchAll(/<meta[^>]+property=["']og:(\w+)["'][^>]+content=["']([^"']+)["']/gi);
-    for (const m of matches) og[m[1]] = m[2];
+    // Match property-before-content order
+    for (const m of html.matchAll(/<meta[^>]+property=["']og:(\w+)["'][^>]+content=["']([^"']+)["']/gi)) {
+      if (!og[m[1]]) og[m[1]] = m[2];
+    }
+    // Match content-before-property order (common in WordPress, Shopify, etc.)
+    for (const m of html.matchAll(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:(\w+)["']/gi)) {
+      if (!og[m[2]]) og[m[2]] = m[1];
+    }
     if (!og['title']) {
       const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
       if (titleMatch) og['title'] = titleMatch[1];
@@ -375,14 +380,17 @@ async function enrichTMDB(title: string): Promise<EnrichResponse> {
 export const enrich = onCall(
   { memory: '256MiB', timeoutSeconds: 30, secrets: [youtubeApiKey, tmdbApiKey] },
   async (request: any) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Authentication required.');
+    }
+
     try {
       const { url } = request.data;
       if (!url || typeof url !== 'string') {
-        throw new Error('URL is required');
+        throw new HttpsError('invalid-argument', 'URL is required.');
       }
 
-      const sanitizedUrl = sanitizeUrl(url);
-      logger.info('Enriching URL:', sanitizedUrl);
+      logger.info('Enriching URL:', redactUrlForLog(url));
       const provider = detectProvider(url);
       let result: EnrichResponse = { provider };
 

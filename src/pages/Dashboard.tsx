@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { format } from "date-fns";
-import { CalendarClock, Shuffle, ArrowUpDown, Play, Check } from "lucide-react";
+import { CalendarClock, Shuffle, ArrowUpDown, Play, Check, Eye } from "lucide-react";
 import { TopNav } from "@/components/layout/TopNav";
 import { HeroBanner } from "@/components/layout/HeroBanner";
 import { Rail } from "@/components/bookmarks/Rail";
@@ -11,9 +11,13 @@ import { StatsBar } from "@/components/dashboard/StatsBar";
 import { FilterChips } from "@/components/dashboard/FilterChips";
 import { FilterPanel, type AdvancedFilters } from "@/components/dashboard/FilterPanel";
 import { BulkActionBar } from "@/components/dashboard/BulkActionBar";
+import { MoodPicker } from "@/components/dashboard/MoodPicker";
 import { SkeletonRail } from "@/components/ui/skeleton-card";
 import { QuickAddBar } from "@/components/QuickAddBar";
 import { EmptyStateGuide } from "@/components/EmptyStateGuide";
+import { DashboardTour } from "@/components/onboarding/DashboardTour";
+import { useDashboardTour } from "@/hooks/useDashboardTour";
+import { CompletionSheet } from "@/components/bookmarks/CompletionSheet";
 import { bookmarkService } from "@/services/bookmarks";
 import { scheduleService } from "@/services/schedules";
 import { ScheduleDialog } from "@/components/schedules/ScheduleDialog";
@@ -49,9 +53,12 @@ type SortOption = "newest" | "oldest" | "az" | "runtime" | "rating";
 const Dashboard = () => {
   const navigate = useNavigate();
   const { isSearchOpen, openSearch, closeSearch } = useSearchShortcut();
+  const { showTour, dismissTour } = useDashboardTour();
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
   const [selectedBookmark, setSelectedBookmark] = useState<Bookmark | null>(null);
+  const [completionBookmark, setCompletionBookmark] = useState<Bookmark | null>(null);
+  const [completionSheetOpen, setCompletionSheetOpen] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState("");
   
   // Filter state
@@ -61,6 +68,7 @@ const Dashboard = () => {
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilters>({
     providers: [], moods: [], runtimeMin: null, runtimeMax: null,
   });
+  const [activeMood, setActiveMood] = useState<string | null>(null);
 
   // Sort + Surprise Me state
   const [sortBy, setSortBy] = useState<SortOption>("newest");
@@ -172,9 +180,36 @@ const Dashboard = () => {
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['bookmarks'] });
     },
-    onSuccess: () => {
-      toast({ title: "Marked as done!", description: "Moved to your watched list." });
+    onSuccess: (_, id) => {
+      const completed = queryClient.getQueryData<Bookmark[]>(['bookmarks'])?.find((b) => b.id === id);
+      if (completed) {
+        setCompletionBookmark(completed);
+        setCompletionSheetOpen(true);
+      }
+      toast({
+        title: "Marked as done!",
+        description: "Moved to your watched list.",
+        action: (
+          <ToastAction altText="Undo" onClick={() => undoDoneMutation.mutate(id)}>
+            Undo
+          </ToastAction>
+        ),
+      });
     },
+  });
+
+  // Rate a completed bookmark (from CompletionSheet)
+  const rateMutation = useMutation({
+    mutationFn: async ({ id, rating, review, watchedWith }: { id: string; rating: number | undefined; review?: string; watchedWith?: string | null }) => {
+      const tasks: Promise<unknown>[] = [];
+      if (rating != null && rating > 0) tasks.push(bookmarkService.rateBookmark(id, rating, review));
+      if (watchedWith) {
+        const existing = queryClient.getQueryData<Bookmark[]>(['bookmarks'])?.find((b) => b.id === id)?.metadata ?? {};
+        tasks.push(bookmarkService.updateBookmark(id, { metadata: { ...existing, watched_with: watchedWith } }));
+      }
+      await Promise.all(tasks);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['bookmarks'] }),
   });
 
   // Undo done mutation (move back to backlog)
@@ -331,6 +366,37 @@ const Dashboard = () => {
 
   const handleDelete = (bookmark: Bookmark) => {
     deleteMutation.mutate(bookmark);
+  };
+
+  const handleMoodSelect = (mood: string | null) => {
+    setActiveMood(mood);
+    setAdvancedFilters((prev) => ({ ...prev, moods: mood ? [mood] : [] }));
+  };
+
+  const handleStatusCycle = (bookmark: Bookmark, newStatus: string) => {
+    if (newStatus === "done") markDoneMutation.mutate(bookmark.id);
+    else if (newStatus === "watching") setWatchingMutation.mutate(bookmark.id);
+    else undoDoneMutation.mutate(bookmark.id);
+  };
+
+  // Episode update mutation
+  const updateEpisodesMutation = useMutation({
+    mutationFn: ({ id, count, existing }: { id: string; count: number; existing: Record<string, unknown> }) =>
+      bookmarkService.updateBookmark(id, { metadata: { ...existing, episodes_watched: count } }),
+    onMutate: async ({ id, count }) => {
+      await queryClient.cancelQueries({ queryKey: ["bookmarks"] });
+      const prev = queryClient.getQueryData<Bookmark[]>(["bookmarks"]);
+      queryClient.setQueryData<Bookmark[]>(["bookmarks"], (old = []) =>
+        old.map((b) => b.id === id ? { ...b, metadata: { ...b.metadata, episodes_watched: count } } : b)
+      );
+      return { prev };
+    },
+    onError: (_, __, ctx) => queryClient.setQueryData(["bookmarks"], ctx?.prev),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["bookmarks"] }),
+  });
+
+  const handleEpisodeUpdate = (bookmark: Bookmark, count: number) => {
+    updateEpisodesMutation.mutate({ id: bookmark.id, count, existing: bookmark.metadata ?? {} });
   };
 
   const handleAddToPlan = (bookmark: Bookmark) => {
@@ -514,13 +580,6 @@ const Dashboard = () => {
         heroBookmark ? "-mt-24" : "pt-20"
       )}>
 
-        {/* QuickAddBar — shown at top when no hero */}
-        {!heroBookmark && !isEmpty && (
-          <div className="container mx-auto px-4 lg:px-8 animate-fade-in">
-            <QuickAddBar />
-          </div>
-        )}
-
         {/* Stats Bar */}
         {bookmarks.length > 0 && (
           <StatsBar
@@ -530,11 +589,15 @@ const Dashboard = () => {
             done={stats.done}
             totalMinutes={stats.totalMinutes}
             className="animate-fade-in"
+            onFilter={(status) => {
+              setFilterStatus(status);
+              document.getElementById("filter-toolbar")?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
           />
         )}
 
-        {/* QuickAddBar — shown below stats when hero is visible */}
-        {heroBookmark && (
+        {/* QuickAddBar — always below StatsBar */}
+        {!isEmpty && (
           <div className="container mx-auto px-4 lg:px-8 animate-fade-in">
             <QuickAddBar />
           </div>
@@ -542,7 +605,7 @@ const Dashboard = () => {
 
         {/* Filter Chips + Toolbar */}
         {bookmarks.length > 0 && (
-          <div className="space-y-2 animate-fade-in">
+          <div id="filter-toolbar" className="space-y-2 animate-fade-in">
             <div className="container mx-auto px-4 lg:px-8 flex items-center justify-between gap-2">
               <div className="flex-1 min-w-0">
                 <FilterChips
@@ -619,10 +682,17 @@ const Dashboard = () => {
             </div>
             {filterPanelOpen && (
               <FilterPanel
-                onApply={(f) => { setAdvancedFilters(f); }}
-                onReset={() => setAdvancedFilters({ providers: [], moods: [], runtimeMin: null, runtimeMax: null })}
+                onApply={(f) => { setAdvancedFilters(f); setActiveMood(null); }}
+                onReset={() => { setAdvancedFilters({ providers: [], moods: [], runtimeMin: null, runtimeMax: null }); setActiveMood(null); }}
               />
             )}
+          </div>
+        )}
+
+        {/* Mood Picker */}
+        {bookmarks.length > 0 && (
+          <div className="container mx-auto px-4 lg:px-8 animate-fade-in">
+            <MoodPicker activeMood={activeMood} onMoodSelect={handleMoodSelect} />
           </div>
         )}
 
@@ -700,23 +770,41 @@ const Dashboard = () => {
             </section>
           )}
 
-          {continueWatching.length > 0 && (
-            <Rail
-              title="Continue Watching"
-              bookmarks={continueWatching}
-              onSchedule={handleSchedule}
-              onMarkDone={handleMarkDone}
-              onAddToPlan={handleAddToPlan}
-              onDelete={handleDelete}
-              onUndoDone={handleUndoDone}
-              onSetWatching={handleSetWatching}
-              isSelectable={selectMode}
-              selectedIds={selectedIds}
-              onSelect={toggleSelect}
-            />
-          )}
+          <Rail
+            title="Continue Watching"
+            bookmarks={continueWatching}
+            onSchedule={handleSchedule}
+            onMarkDone={handleMarkDone}
+            onAddToPlan={handleAddToPlan}
+            onDelete={handleDelete}
+            onUndoDone={handleUndoDone}
+            onSetWatching={handleSetWatching}
+            onStatusCycle={handleStatusCycle}
+            onEpisodeUpdate={handleEpisodeUpdate}
+            isSelectable={selectMode}
+            selectedIds={selectedIds}
+            onSelect={toggleSelect}
+            emptyState={!hasActiveFilters && !selectMode && (
+              <section className="py-4">
+                <div className="container mx-auto px-4 lg:px-8">
+                  <h2 className="text-xl font-semibold text-foreground mb-3">Continue Watching</h2>
+                  <div className="flex items-center gap-3 py-3 px-4 rounded-xl border border-dashed border-border text-sm text-muted-foreground">
+                    <Eye className="w-4 h-4 shrink-0" />
+                    <span>Nothing in progress — start something from your backlog</span>
+                    <button
+                      type="button"
+                      onClick={() => document.getElementById("backlog-rail")?.scrollIntoView({ behavior: "smooth" })}
+                      className="ml-auto text-xs text-primary hover:underline shrink-0"
+                    >
+                      Browse backlog →
+                    </button>
+                  </div>
+                </div>
+              </section>
+            )}
+          />
 
-          {backlog.length > 0 && (
+          <div id="backlog-rail">
             <Rail
               title="Saved for Later"
               subtitle="Your backlog — ready to watch"
@@ -727,15 +815,18 @@ const Dashboard = () => {
               onDelete={handleDelete}
               onUndoDone={handleUndoDone}
               onSetWatching={handleSetWatching}
+              onStatusCycle={handleStatusCycle}
+              onEpisodeUpdate={handleEpisodeUpdate}
               isSelectable={selectMode}
               selectedIds={selectedIds}
               onSelect={toggleSelect}
             />
-          )}
+          </div>
 
           {/* Mood Rails */}
           {Object.entries(byMood)
             .filter(([_, items]) => items.length >= 2)
+            .sort(([, a], [, b]) => b.length - a.length)
             .slice(0, 3)
             .map(([mood, items]) => (
               <Rail
@@ -748,27 +839,40 @@ const Dashboard = () => {
                 onDelete={handleDelete}
                 onUndoDone={handleUndoDone}
                 onSetWatching={handleSetWatching}
+                onStatusCycle={handleStatusCycle}
+                onEpisodeUpdate={handleEpisodeUpdate}
                 isSelectable={selectMode}
                 selectedIds={selectedIds}
                 onSelect={toggleSelect}
               />
             ))}
 
-          {completed.length > 0 && (
-            <Rail
-              title="Recently Watched"
-              bookmarks={completed}
-              onSchedule={handleSchedule}
-              onMarkDone={handleMarkDone}
-              onAddToPlan={handleAddToPlan}
-              onDelete={handleDelete}
-              onUndoDone={handleUndoDone}
-              onSetWatching={handleSetWatching}
-              isSelectable={selectMode}
-              selectedIds={selectedIds}
-              onSelect={toggleSelect}
-            />
-          )}
+          <Rail
+            title="Recently Watched"
+            bookmarks={completed}
+            onSchedule={handleSchedule}
+            onMarkDone={handleMarkDone}
+            onAddToPlan={handleAddToPlan}
+            onDelete={handleDelete}
+            onUndoDone={handleUndoDone}
+            onSetWatching={handleSetWatching}
+            onStatusCycle={handleStatusCycle}
+            onEpisodeUpdate={handleEpisodeUpdate}
+            isSelectable={selectMode}
+            selectedIds={selectedIds}
+            onSelect={toggleSelect}
+            emptyState={!hasActiveFilters && !selectMode && (
+              <section className="py-4">
+                <div className="container mx-auto px-4 lg:px-8">
+                  <h2 className="text-xl font-semibold text-foreground mb-3">Recently Watched</h2>
+                  <div className="flex items-center gap-3 py-3 px-4 rounded-xl border border-dashed border-border text-sm text-muted-foreground">
+                    <Check className="w-4 h-4 shrink-0" />
+                    <span>Finish something to see it here</span>
+                  </div>
+                </div>
+              </section>
+            )}
+          />
 
           {/* Filtered empty state */}
           {hasActiveFilters && filteredBookmarks.length === 0 && (
@@ -779,6 +883,7 @@ const Dashboard = () => {
                 onClick={() => {
                   setFilterType("all");
                   setFilterStatus("all");
+                  setAdvancedFilters({ providers: [], moods: [], runtimeMin: null, runtimeMax: null });
                 }}
               >
                 Clear Filters
@@ -872,6 +977,22 @@ const Dashboard = () => {
         onClear={() => { setSelectedIds(new Set()); setSelectMode(false); }}
       />
 
+      {/* Completion Rating Sheet */}
+      <CompletionSheet
+        bookmark={completionBookmark}
+        open={completionSheetOpen}
+        onOpenChange={setCompletionSheetOpen}
+        onRate={(id, rating, review, watchedWith) => rateMutation.mutate({ id, rating, review, watchedWith })}
+        onSkip={() => setCompletionSheetOpen(false)}
+      />
+
+      {/* Onboarding Tour */}
+      <DashboardTour
+        open={showTour}
+        onDismiss={dismissTour}
+        onFinish={dismissTour}
+      />
+
       {/* Surprise Me Sheet */}
       <Sheet open={!!surpriseBookmark} onOpenChange={(o) => { if (!o) setSurpriseBookmark(null); }}>
         <SheetContent side="bottom" className="rounded-t-2xl pb-8">
@@ -907,7 +1028,8 @@ const Dashboard = () => {
                       </Button>
                     )}
                     <Button size="sm" variant="secondary" onClick={() => {
-                      markDoneMutation.mutate(surpriseBookmark.id);
+                      const id = surpriseBookmark.id;
+                      markDoneMutation.mutate(id);
                       setSurpriseBookmark(null);
                     }}>
                       <Check className="w-3 h-3 mr-1" />
