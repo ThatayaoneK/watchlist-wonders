@@ -477,8 +477,8 @@ const NewBookmark = () => {
               </div>
 
               {/* Type + Runtime + Year */}
-              <div className="grid grid-cols-3 gap-3">
-                <div className="space-y-1.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="col-span-2 sm:col-span-1 space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Type</Label>
                   <Select value={type} onValueChange={(v) => setType(v as Bookmark["type"])}>
                     <SelectTrigger className="h-9">

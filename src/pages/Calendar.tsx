@@ -59,7 +59,7 @@ const Calendar = () => {
     <div className="min-h-screen bg-background">
       <TopNav onSearchClick={openSearch} />
 
-      <div className="container mx-auto px-4 lg:px-8 pt-20 pb-16">
+      <div className="container mx-auto px-4 lg:px-8 pt-20 pb-24 md:pb-16">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
