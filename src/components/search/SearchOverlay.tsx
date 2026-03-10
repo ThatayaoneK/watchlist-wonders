@@ -218,9 +218,20 @@ export function SearchOverlay({ isOpen, onClose, bookmarks }: SearchOverlayProps
           </div>
         )}
 
-        {/* Hint */}
-        <div className="mt-3 text-center text-sm text-muted-foreground">
-          Press <kbd className="px-1.5 py-0.5 bg-secondary rounded text-xs">ESC</kbd> to close
+        {/* Hint / close */}
+        <div className="mt-3 flex items-center justify-center gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onClose}
+            className="md:hidden text-sm text-muted-foreground gap-1.5"
+          >
+            <X className="w-4 h-4" />
+            Close
+          </Button>
+          <span className="hidden md:inline text-sm text-muted-foreground">
+            Press <kbd className="px-1.5 py-0.5 bg-secondary rounded text-xs">ESC</kbd> to close
+          </span>
         </div>
       </div>
     </div>

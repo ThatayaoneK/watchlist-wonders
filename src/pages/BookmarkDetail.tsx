@@ -381,7 +381,7 @@ const BookmarkDetail = () => {
           ) : (
             // View Mode
             <>
-              <h1 className="text-4xl font-bold text-foreground mb-4">{bookmark.title}</h1>
+              <h1 className="text-2xl sm:text-4xl font-bold text-foreground mb-4">{bookmark.title}</h1>
 
               {/* Meta Info */}
               <div className="flex flex-wrap items-center gap-3 text-muted-foreground mb-6">
@@ -499,7 +499,7 @@ const BookmarkDetail = () => {
                       onClick={() => rateMutation.mutate({
                         rating: bookmark.user_rating === star ? null : star,
                       })}
-                      className="p-0.5 hover:scale-110 transition-transform"
+                      className="p-1.5 hover:scale-110 transition-transform"
                       aria-label={`Rate ${star} star${star !== 1 ? 's' : ''}`}
                     >
                       <Star

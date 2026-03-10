@@ -232,7 +232,7 @@ const Settings = () => {
     <div className="min-h-screen bg-background">
       <TopNav onSearchClick={openSearch} />
       
-      <div className="pt-20 pb-16">
+      <div className="pt-20 pb-24 md:pb-16">
         <div className="container mx-auto px-4 lg:px-8 max-w-2xl">
           <div className="space-y-6 animate-fade-in">
             {/* Header */}

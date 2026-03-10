@@ -33,10 +33,10 @@ export function HeroBanner({ bookmark, onPlay, onMoreInfo, className }: HeroBann
         <GradientBarsBackground className="opacity-60" />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/50 to-transparent" />
         <div className="relative z-10 container mx-auto px-4 lg:px-8 pb-20">
-          <h2 className="text-3xl md:text-5xl font-bold text-foreground mb-4">
+          <h2 className="text-2xl md:text-5xl font-bold text-foreground mb-4">
             Your Watchlist Awaits
           </h2>
-          <p className="text-lg text-muted-foreground max-w-xl mb-6">
+          <p className="text-sm md:text-lg text-muted-foreground max-w-xl mb-6">
             Add your first bookmark to get started. Paste any URL and we'll fetch the details automatically.
           </p>
           <Button variant="default" size="lg" asChild>
@@ -87,7 +87,7 @@ export function HeroBanner({ bookmark, onPlay, onMoreInfo, className }: HeroBann
         </div>
 
         {/* Title */}
-        <h1 className="text-4xl md:text-6xl font-bold text-foreground mb-4 max-w-3xl">
+        <h1 className="text-2xl sm:text-4xl md:text-6xl font-bold text-foreground mb-4 max-w-3xl line-clamp-3">
           {bookmark.title}
         </h1>
 
@@ -112,7 +112,7 @@ export function HeroBanner({ bookmark, onPlay, onMoreInfo, className }: HeroBann
 
         {/* Description */}
         {bookmark.notes && (
-          <p className="text-lg text-muted-foreground max-w-2xl mb-8 line-clamp-3">
+          <p className="text-sm md:text-lg text-muted-foreground max-w-2xl mb-8 line-clamp-3">
             {bookmark.notes}
           </p>
         )}
