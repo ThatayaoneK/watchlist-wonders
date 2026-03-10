@@ -160,6 +160,12 @@ export default {
           "-ms-overflow-style": "none",
           "scrollbar-width": "none",
         },
+        ".pb-safe": {
+          paddingBottom: "env(safe-area-inset-bottom)",
+        },
+        ".pb-safe-offset-16": {
+          paddingBottom: "calc(4rem + env(safe-area-inset-bottom))",
+        },
       });
     },
   ],

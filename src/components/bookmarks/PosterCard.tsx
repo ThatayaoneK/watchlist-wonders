@@ -546,11 +546,11 @@ export function PosterCard({
                   <Button
                     variant="secondary"
                     size="icon"
-                    className="h-10 w-10 rounded-full bg-background/80 backdrop-blur-sm"
+                    className="h-11 w-11 rounded-full bg-background/80 backdrop-blur-sm"
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
                     aria-label="More options"
                   >
-                    <MoreHorizontal className="w-3.5 h-3.5" />
+                    <MoreHorizontal className="w-4 h-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
