@@ -22,7 +22,7 @@ const resolveUrl = (value: string | undefined, baseUrl: string) => {
 };
 
 export const fetchOpenGraphMetadata = async (url: string): Promise<OpenGraphMetadata> => {
-  const proxyUrl = `https://r.jina.ai/http://${url}`;
+  const proxyUrl = `https://r.jina.ai/${url}`;
   const response = await fetch(proxyUrl);
 
   if (!response.ok) {
