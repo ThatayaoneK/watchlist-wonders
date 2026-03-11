@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft, Play, Check, Trash2, Edit2,
@@ -34,11 +34,21 @@ import { useToast } from "@/hooks/use-toast";
 import { formatRuntime, getMoodEmoji } from "@/lib/utils";
 import type { Bookmark } from "@/types/database";
 
+function isSafeUrl(url: string): boolean {
+  try {
+    const { protocol } = new URL(url);
+    return protocol === "https:" || protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
 const STATUS_OPTIONS: { value: Bookmark["status"]; label: string }[] = [
-  { value: "backlog", label: "Backlog" },
-  { value: "watching", label: "Watching" },
-  { value: "done", label: "Done" },
-  { value: "dropped", label: "Dropped" },
+  { value: "backlog", label: "Want to Watch" },
+  { value: "watching", label: "Currently Watching" },
+  { value: "done", label: "Watched" },
+  { value: "dropped", label: "Not for Me" },
+  { value: "scheduled", label: "Scheduled" },
 ];
 
 const BookmarkDetail = () => {
@@ -94,7 +104,6 @@ const BookmarkDetail = () => {
     } catch (err: any) {
       toast({ title: "Upload failed", description: "Could not upload the file. Please try again.", variant: "destructive" });
     }
-    // Reset file input
     if (attachFileRef.current) attachFileRef.current.value = "";
   };
 
@@ -104,15 +113,12 @@ const BookmarkDetail = () => {
       queryClient.invalidateQueries({ queryKey: ['bookmark', id] });
       queryClient.invalidateQueries({ queryKey: ['bookmarks'] });
       setIsEditing(false);
-      toast({
-        title: "Bookmark updated",
-        description: "Your changes have been saved.",
-      });
+      toast({ title: "Changes saved" });
     },
-    onError: (error: any) => {
+    onError: () => {
       toast({
-        title: "Error updating bookmark",
-        description: "Could not update the bookmark. Please try again.",
+        title: "Couldn't save changes",
+        description: "Something went wrong. Please try again.",
         variant: "destructive",
       });
     },
@@ -122,11 +128,15 @@ const BookmarkDetail = () => {
     mutationFn: () => bookmarkService.deleteBookmark(id!),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bookmarks'] });
-      toast({
-        title: "Bookmark deleted",
-        description: "The bookmark has been removed.",
-      });
+      toast({ title: "Removed from your list" });
       navigate("/dashboard");
+    },
+    onError: () => {
+      toast({
+        title: "Couldn't remove this title",
+        description: "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
     },
   });
 
@@ -138,10 +148,10 @@ const BookmarkDetail = () => {
       navigator.clipboard.writeText(shareUrl).catch(() => {});
       toast({ title: "Share link copied!", description: shareUrl });
     },
-    onError: (error: any) => {
+    onError: () => {
       toast({
-        title: "Failed to share bookmark",
-        description: "Could not create the share link. Please try again.",
+        title: "Couldn't create share link",
+        description: "Please try again.",
         variant: "destructive",
       });
     },
@@ -151,12 +161,12 @@ const BookmarkDetail = () => {
     mutationFn: () => sharingService.makeBookmarkPrivate(id!),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bookmark', id] });
-      toast({ title: "Sharing disabled" });
+      toast({ title: "Sharing turned off" });
     },
-    onError: (error: any) => {
+    onError: () => {
       toast({
-        title: "Failed to disable sharing",
-        description: "Could not disable sharing. Please try again.",
+        title: "Couldn't turn off sharing",
+        description: "Please try again.",
         variant: "destructive",
       });
     },
@@ -169,8 +179,8 @@ const BookmarkDetail = () => {
       queryClient.invalidateQueries({ queryKey: ['bookmark', id] });
       queryClient.invalidateQueries({ queryKey: ['bookmarks'] });
     },
-    onError: (error: any) => {
-      toast({ title: "Failed to save rating", description: "Could not save your rating. Please try again.", variant: "destructive" });
+    onError: () => {
+      toast({ title: "Couldn't save your rating", description: "Please try again.", variant: "destructive" });
     },
   });
 
@@ -186,10 +196,10 @@ const BookmarkDetail = () => {
       }),
     onSuccess: (newBm) => {
       queryClient.invalidateQueries({ queryKey: ['bookmarks'] });
-      toast({ title: "Added to watchlist", description: newBm.title });
+      toast({ title: "Added to your list", description: newBm.title });
     },
-    onError: (error: any) => {
-      toast({ title: "Failed to add", description: "Could not add to watchlist. Please try again.", variant: "destructive" });
+    onError: () => {
+      toast({ title: "Couldn't add to list", description: "Please try again.", variant: "destructive" });
     },
   });
 
@@ -219,7 +229,6 @@ const BookmarkDetail = () => {
   const { data: watchProviders } = useWatchProviders(tmdbId, bookmark?.type || 'movie');
   const { data: similarTitles = [] } = useSimilarTitles(tmdbId, bookmark?.type || 'movie');
 
-  // IDs already in the user's bookmarks (for duplicate guard on similar titles)
   const { data: allBookmarks = [] } = useQuery({
     queryKey: ['bookmarks'],
     queryFn: () => bookmarkService.getBookmarks(),
@@ -228,10 +237,10 @@ const BookmarkDetail = () => {
   const ownedTmdbIds = new Set(
     allBookmarks
       .map((b) => {
-        const id = b.metadata?.tmdb_id ?? b.metadata?.tmdbId;
-        return typeof id === 'string' ? parseInt(id, 10) : id;
+        const bid = b.metadata?.tmdb_id ?? b.metadata?.tmdbId;
+        return typeof bid === 'string' ? parseInt(bid, 10) : bid;
       })
-      .filter((id) => typeof id === 'number' && !isNaN(id))
+      .filter((bid) => typeof bid === 'number' && !isNaN(bid))
   );
 
   if (isLoading) {
@@ -244,9 +253,9 @@ const BookmarkDetail = () => {
 
   if (error || !bookmark) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center">
-        <p className="text-destructive mb-4">Bookmark not found</p>
-        <Button onClick={() => navigate("/dashboard")}>Back to Dashboard</Button>
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
+        <p className="text-muted-foreground">We couldn't find this title</p>
+        <Button onClick={() => navigate("/dashboard")}>Back to My List</Button>
       </div>
     );
   }
@@ -255,11 +264,15 @@ const BookmarkDetail = () => {
     || (bookmark.metadata?.backdrop_url as string | undefined)
     || bookmark.poster_url;
   const voteAverage = bookmark.metadata?.vote_average as number | undefined;
+  const overview = bookmark.metadata?.overview as string | undefined;
+
+  const hasProviders = watchProviders &&
+    (watchProviders.flatrate.length > 0 || watchProviders.rent.length > 0 || watchProviders.buy.length > 0);
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Hero/Backdrop */}
-      <div className="relative h-[40vh] md:h-[50vh] bg-secondary">
+      {/* Hero/Backdrop — taller for a cinematic feel */}
+      <div className="relative h-[55vh] md:h-[65vh] bg-secondary">
         {imageUrl ? (
           <img
             src={imageUrl}
@@ -273,8 +286,10 @@ const BookmarkDetail = () => {
             </span>
           </div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/50 to-transparent" />
-        
+        {/* Netflix-style gradient: bottom-heavy for legibility */}
+        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-r from-background/60 via-transparent to-transparent" />
+
         {/* Back Button */}
         <Button
           variant="ghost"
@@ -286,14 +301,14 @@ const BookmarkDetail = () => {
           <ArrowLeft className="w-5 h-5" />
         </Button>
 
-        {/* Actions */}
+        {/* Top-right actions */}
         <div className="absolute top-4 right-4 flex gap-2">
           <Button
             variant="ghost"
             size="icon"
             className="bg-background/80 backdrop-blur focus-visible:ring-2 focus-visible:ring-ring"
             onClick={handleStartEdit}
-            aria-label="Edit bookmark"
+            aria-label="Edit"
           >
             <Edit2 className="w-5 h-5" />
           </Button>
@@ -303,16 +318,16 @@ const BookmarkDetail = () => {
                 variant="ghost"
                 size="icon"
                 className="bg-background/80 backdrop-blur text-destructive hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label="Delete bookmark"
+                aria-label="Remove from list"
               >
                 <Trash2 className="w-5 h-5" />
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Delete bookmark?</AlertDialogTitle>
+                <AlertDialogTitle>Remove from your list?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This will permanently delete "{bookmark.title}" from your watchlist. This action cannot be undone.
+                  "{bookmark.title}" will be permanently removed. You can always add it back later.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -321,7 +336,7 @@ const BookmarkDetail = () => {
                   onClick={() => deleteMutation.mutate()}
                   className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 >
-                  Delete
+                  Remove
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
@@ -329,76 +344,85 @@ const BookmarkDetail = () => {
         </div>
       </div>
 
-      {/* Content */}
-      <div className="container mx-auto px-4 lg:px-8 -mt-32 relative z-10 pb-16">
-        <div className="max-w-3xl">
-          {isEditing ? (
-            // Edit Mode
-            <div className="bg-card border border-border rounded-lg p-6 space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-title">Title</Label>
-                <Input
-                  id="edit-title"
-                  value={editTitle}
-                  onChange={(e) => setEditTitle(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-status">Status</Label>
-                <Select value={editStatus} onValueChange={(v) => setEditStatus(v as Bookmark["status"])}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {STATUS_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-notes">Notes</Label>
-                <Textarea
-                  id="edit-notes"
-                  value={editNotes}
-                  onChange={(e) => setEditNotes(e.target.value)}
-                  rows={4}
-                />
-              </div>
-              <div className="flex gap-2 pt-4">
-                <Button onClick={handleSaveEdit} disabled={updateMutation.isPending}>
-                  <Save className="w-4 h-4 mr-2" />
-                  Save
-                </Button>
-                <Button variant="ghost" onClick={() => setIsEditing(false)}>
-                  <X className="w-4 h-4 mr-2" />
-                  Cancel
-                </Button>
-              </div>
+      {/* Content — overlapping the hero */}
+      <div className="container mx-auto px-4 lg:px-8 -mt-48 relative z-10 pb-24">
+        {isEditing ? (
+          <div className="bg-card border border-border rounded-lg p-6 space-y-4 max-w-2xl">
+            <div className="space-y-2">
+              <Label htmlFor="edit-title">Title</Label>
+              <Input
+                id="edit-title"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+              />
             </div>
-          ) : (
-            // View Mode
-            <>
-              <h1 className="text-2xl sm:text-4xl font-bold text-foreground mb-4">{bookmark.title}</h1>
+            <div className="space-y-2">
+              <Label htmlFor="edit-status">Status</Label>
+              <Select value={editStatus} onValueChange={(v) => setEditStatus(v as Bookmark["status"])}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUS_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-notes">Notes</Label>
+              <Textarea
+                id="edit-notes"
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                rows={4}
+              />
+            </div>
+            <div className="flex gap-2 pt-4">
+              <Button onClick={handleSaveEdit} disabled={updateMutation.isPending}>
+                <Save className="w-4 h-4 mr-2" />
+                Save
+              </Button>
+              <Button variant="ghost" onClick={() => setIsEditing(false)}>
+                <X className="w-4 h-4 mr-2" />
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex gap-6 items-start">
+            {/* Poster thumbnail — desktop only */}
+            {bookmark.poster_url && (
+              <div className="hidden md:block shrink-0 w-44 -mt-2">
+                <div className="aspect-[2/3] rounded-xl overflow-hidden shadow-2xl ring-1 ring-white/10">
+                  <img
+                    src={bookmark.poster_url}
+                    alt={bookmark.title}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              </div>
+            )}
 
-              {/* Meta Info */}
-              <div className="flex flex-wrap items-center gap-3 text-muted-foreground mb-6">
+            {/* Main info */}
+            <div className="flex-1 min-w-0">
+              {/* Title */}
+              <h1 className="text-2xl sm:text-4xl font-bold text-foreground mb-3 leading-tight">
+                {bookmark.title}
+              </h1>
+
+              {/* Meta row */}
+              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground mb-5">
+                {bookmark.release_year && <span>{bookmark.release_year}</span>}
+                {bookmark.release_year && <span>•</span>}
                 <span className="capitalize">{bookmark.type}</span>
-                <span>•</span>
-                <span className="capitalize">{bookmark.provider}</span>
-                {bookmark.release_year && (
-                  <>
-                    <span>•</span>
-                    <span>{bookmark.release_year}</span>
-                  </>
-                )}
                 {bookmark.runtime_minutes && (
                   <>
                     <span>•</span>
                     <span className="flex items-center gap-1">
-                      <Clock className="w-4 h-4" />
+                      <Clock className="w-3.5 h-3.5" />
                       {formatRuntime(bookmark.runtime_minutes)}
                     </span>
                   </>
@@ -406,18 +430,18 @@ const BookmarkDetail = () => {
                 {voteAverage != null && voteAverage > 0 && (
                   <>
                     <span>•</span>
-                    <span className="flex items-center gap-1 text-yellow-500 font-medium">
-                      <Star className="w-4 h-4 fill-yellow-500" />
+                    <span className="flex items-center gap-1 text-yellow-400 font-semibold">
+                      <Star className="w-3.5 h-3.5 fill-yellow-400" />
                       {voteAverage.toFixed(1)}
                     </span>
                   </>
                 )}
               </div>
 
-              {/* Status Badge */}
-              <div className="mb-6">
+              {/* Status selector */}
+              <div className="mb-5">
                 <Select value={bookmark.status} onValueChange={handleStatusChange}>
-                  <SelectTrigger className="w-[180px]">
+                  <SelectTrigger className="w-[200px]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -430,22 +454,160 @@ const BookmarkDetail = () => {
                 </Select>
               </div>
 
-              {/* Actions */}
-              <div className="flex flex-wrap gap-3 mb-8">
+              {/* Primary actions */}
+              <div className="flex flex-wrap gap-3 mb-6">
                 {bookmark.source_url && (
-                  <Button onClick={() => window.open(bookmark.source_url!, "_blank")}>
-                    <Play className="w-4 h-4 mr-2 fill-current" />
+                  <Button
+                    size="lg"
+                    className="bg-red-600 hover:bg-red-700 text-white gap-2 px-6"
+                    onClick={() => {
+                      if (!isSafeUrl(bookmark.source_url)) {
+                        toast({
+                          title: "URL blocked",
+                          description: "This URL was blocked as it may be unsafe. Please verify the source before accessing it.",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                      window.open(bookmark.source_url, "_blank");
+                    }}
+                    disabled={!isSafeUrl(bookmark.source_url)}
+                  >
+                    <Play className="w-5 h-5 fill-current" />
                     Watch Now
                   </Button>
                 )}
                 <Button
+                  size="lg"
                   variant="secondary"
                   onClick={() => handleStatusChange("done")}
                   disabled={bookmark.status === "done"}
+                  className="gap-2"
                 >
-                  <Check className="w-4 h-4 mr-2" />
-                  Mark as Done
+                  <Check className="w-4 h-4" />
+                  {bookmark.status === "done" ? "Already Watched" : "Mark as Watched"}
                 </Button>
+              </div>
+
+              {/* Description/overview from TMDB */}
+              {overview && (
+                <p className="text-muted-foreground text-sm leading-relaxed mb-6 max-w-xl">
+                  {overview}
+                </p>
+              )}
+
+              {/* ── WHERE TO WATCH ── */}
+              {hasProviders && (
+                <div className="mb-8 p-4 bg-wm-surface border border-border rounded-xl">
+                  <h3 className="font-semibold mb-4 flex items-center gap-2 text-foreground">
+                    <Tv className="w-4 h-4 text-primary" />
+                    Where to Watch
+                  </h3>
+                  <div className="space-y-4">
+                    {watchProviders!.flatrate.length > 0 && (
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                          Included with subscription
+                        </p>
+                        <div className="flex flex-wrap gap-3">
+                          {watchProviders!.flatrate.map((p) => (
+                            <div
+                              key={p.provider_id}
+                              className="flex items-center gap-2 bg-background rounded-lg px-3 py-2 ring-1 ring-border"
+                              title={p.provider_name}
+                            >
+                              <img src={p.logoUrl} alt={p.provider_name} className="w-7 h-7 rounded-md" />
+                              <span className="text-sm font-medium">{p.provider_name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {watchProviders!.rent.length > 0 && (
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                          Rent
+                        </p>
+                        <div className="flex flex-wrap gap-3">
+                          {watchProviders!.rent.map((p) => (
+                            <div
+                              key={p.provider_id}
+                              className="flex items-center gap-2 bg-background rounded-lg px-3 py-2 ring-1 ring-border"
+                              title={p.provider_name}
+                            >
+                              <img src={p.logoUrl} alt={p.provider_name} className="w-7 h-7 rounded-md" />
+                              <span className="text-sm font-medium">{p.provider_name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {watchProviders!.buy.length > 0 && (
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                          Buy
+                        </p>
+                        <div className="flex flex-wrap gap-3">
+                          {watchProviders!.buy.map((p) => (
+                            <div
+                              key={p.provider_id}
+                              className="flex items-center gap-2 bg-background rounded-lg px-3 py-2 ring-1 ring-border"
+                              title={p.provider_name}
+                            >
+                              <img src={p.logoUrl} alt={p.provider_name} className="w-7 h-7 rounded-md" />
+                              <span className="text-sm font-medium">{p.provider_name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {watchProviders!.link && (
+                      <a
+                        href={watchProviders!.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary hover:underline inline-flex items-center gap-1 mt-1"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        See all options on JustWatch
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* My Rating */}
+              <div className="mb-6">
+                <h3 className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-1">
+                  <Star className="w-4 h-4" />
+                  My Rating
+                </h3>
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => rateMutation.mutate({
+                        rating: bookmark.user_rating === star ? null : star,
+                      })}
+                      className="p-1.5 hover:scale-110 transition-transform"
+                      aria-label={`Rate ${star} star${star !== 1 ? 's' : ''}`}
+                    >
+                      <Star
+                        className={`w-6 h-6 ${
+                          (bookmark.user_rating || 0) >= star
+                            ? 'fill-yellow-400 text-yellow-400'
+                            : 'text-muted-foreground'
+                        }`}
+                      />
+                    </button>
+                  ))}
+                  {bookmark.user_rating && (
+                    <span className="text-sm text-muted-foreground ml-2">
+                      {bookmark.user_rating}/5
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* Mood Tags */}
@@ -480,106 +642,8 @@ const BookmarkDetail = () => {
               {/* Notes */}
               {bookmark.notes && (
                 <div className="mb-6">
-                  <h3 className="text-sm font-medium text-muted-foreground mb-2">Notes</h3>
-                  <p className="text-foreground whitespace-pre-wrap">{bookmark.notes}</p>
-                </div>
-              )}
-
-              {/* Personal Rating */}
-              <div className="mb-6">
-                <h3 className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-1">
-                  <Star className="w-4 h-4" />
-                  My Rating
-                </h3>
-                <div className="flex items-center gap-1">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                      key={star}
-                      type="button"
-                      onClick={() => rateMutation.mutate({
-                        rating: bookmark.user_rating === star ? null : star,
-                      })}
-                      className="p-1.5 hover:scale-110 transition-transform"
-                      aria-label={`Rate ${star} star${star !== 1 ? 's' : ''}`}
-                    >
-                      <Star
-                        className={`w-6 h-6 ${
-                          (bookmark.user_rating || 0) >= star
-                            ? 'fill-yellow-400 text-yellow-400'
-                            : 'text-muted-foreground'
-                        }`}
-                      />
-                    </button>
-                  ))}
-                  {bookmark.user_rating && (
-                    <span className="text-sm text-muted-foreground ml-2">
-                      {bookmark.user_rating}/5
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Where to Watch */}
-              {watchProviders && (
-                (watchProviders.flatrate.length > 0 || watchProviders.rent.length > 0 || watchProviders.buy.length > 0)
-              ) && (
-                <div className="mb-6">
-                  <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-1">
-                    <Tv className="w-4 h-4" />
-                    Where to Watch
-                  </h3>
-                  <div className="space-y-3">
-                    {watchProviders!.flatrate.length > 0 && (
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1.5">Stream</p>
-                        <div className="flex flex-wrap gap-2">
-                          {watchProviders!.flatrate.map((p) => (
-                            <div key={p.provider_id} className="flex items-center gap-1.5 bg-secondary rounded-lg px-2 py-1.5" title={p.provider_name}>
-                              <img src={p.logoUrl} alt={p.provider_name} className="w-5 h-5 rounded" />
-                              <span className="text-xs">{p.provider_name}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {watchProviders!.rent.length > 0 && (
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1.5">Rent</p>
-                        <div className="flex flex-wrap gap-2">
-                          {watchProviders!.rent.map((p) => (
-                            <div key={p.provider_id} className="flex items-center gap-1.5 bg-secondary rounded-lg px-2 py-1.5" title={p.provider_name}>
-                              <img src={p.logoUrl} alt={p.provider_name} className="w-5 h-5 rounded" />
-                              <span className="text-xs">{p.provider_name}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {watchProviders!.buy.length > 0 && (
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1.5">Buy</p>
-                        <div className="flex flex-wrap gap-2">
-                          {watchProviders!.buy.map((p) => (
-                            <div key={p.provider_id} className="flex items-center gap-1.5 bg-secondary rounded-lg px-2 py-1.5" title={p.provider_name}>
-                              <img src={p.logoUrl} alt={p.provider_name} className="w-5 h-5 rounded" />
-                              <span className="text-xs">{p.provider_name}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {watchProviders!.link && (
-                      <a
-                        href={watchProviders!.link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-primary hover:underline inline-flex items-center gap-1"
-                      >
-                        <ExternalLink className="w-3 h-3" />
-                        View all options on JustWatch
-                      </a>
-                    )}
-                  </div>
+                  <h3 className="text-sm font-medium text-muted-foreground mb-2">My Notes</h3>
+                  <p className="text-foreground text-sm whitespace-pre-wrap leading-relaxed">{bookmark.notes}</p>
                 </div>
               )}
 
@@ -588,10 +652,10 @@ const BookmarkDetail = () => {
                 <div className="mb-6">
                   <h3 className="text-sm font-medium text-muted-foreground mb-2">Source</h3>
                   <a
-                    href={bookmark.source_url}
+                    href={bookmark.source_url && isSafeUrl(bookmark.source_url) ? bookmark.source_url : "#"}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-primary hover:underline flex items-center gap-1"
+                    className="text-primary hover:underline flex items-center gap-1 text-sm"
                   >
                     <ExternalLink className="w-4 h-4" />
                     {bookmark.source_url}
@@ -609,7 +673,7 @@ const BookmarkDetail = () => {
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="secondary" className="gap-1">
                       <Globe className="w-3 h-3" />
-                      Public
+                      Anyone with the link can view
                     </Badge>
                     <Button
                       variant="ghost"
@@ -643,7 +707,7 @@ const BookmarkDetail = () => {
                     disabled={makePublicMutation.isPending}
                   >
                     <Globe className="w-4 h-4 mr-2" />
-                    Make public & copy link
+                    Share & copy link
                   </Button>
                 )}
               </div>
@@ -705,7 +769,7 @@ const BookmarkDetail = () => {
                           )}
                         </div>
                         <a
-                          href={att.file_url}
+                          href={isSafeUrl(att.file_url) ? att.file_url : "#"}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="p-1.5 hover:bg-background rounded transition-colors"
@@ -731,6 +795,7 @@ const BookmarkDetail = () => {
                   </div>
                 )}
               </div>
+
               {/* Similar Titles */}
               {similarTitles.length > 0 && (
                 <div className="mb-6">
@@ -761,7 +826,7 @@ const BookmarkDetail = () => {
                                 onClick={() => addSimilarMutation.mutate(item)}
                                 disabled={addSimilarMutation.isPending}
                                 className="absolute inset-0 bg-background/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
-                                aria-label={`Add ${item.title} to watchlist`}
+                                aria-label={`Add ${item.title} to your list`}
                               >
                                 <Plus className="w-6 h-6 text-primary" />
                               </button>
@@ -782,9 +847,9 @@ const BookmarkDetail = () => {
                   </div>
                 </div>
               )}
-            </>
-          )}
-        </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

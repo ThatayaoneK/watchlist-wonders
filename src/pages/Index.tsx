@@ -120,14 +120,14 @@ const Index = () => {
               </p>
 
               <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold leading-tight mb-6">
-                Paste a link.
+                Bookmark it now.
                 <br />
                 <span className="text-primary">Watch it later.</span>
               </h1>
 
               <p className="text-lg md:text-xl text-muted-foreground max-w-lg mb-8 leading-relaxed">
-                Save movies and shows from Instagram, YouTube, Facebook, and X.
-                Schedule reminders. Never forget what you wanted to watch.
+                Bookmark movies and shows from Instagram, YouTube, Facebook, and X.
+                Schedule reminders. Never lose track of what you wanted to watch.
               </p>
 
               {/* Platform icons row */}
@@ -229,7 +229,7 @@ const Index = () => {
                       <div className="flex gap-1.5">
                         <div className="flex items-center gap-1 text-[10px] text-chart-3 bg-chart-3/10 px-1.5 py-0.5 rounded-full">
                           <Check className="w-2.5 h-2.5" />
-                          Saved!
+                          Bookmarked!
                         </div>
                         <div className="flex items-center gap-1 text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">
                           <Bell className="w-2.5 h-2.5" />
@@ -255,7 +255,7 @@ const Index = () => {
               <div className="absolute -top-4 -right-4 bg-card border border-border rounded-lg px-3 py-2 shadow-lg">
                 <div className="flex items-center gap-2">
                   <Star className="w-3.5 h-3.5 text-wm-gold fill-current" />
-                  <span className="text-xs font-medium">47 saved this week</span>
+                  <span className="text-xs font-medium">47 bookmarked this week</span>
                 </div>
               </div>
               <div className="absolute -bottom-4 -left-4 bg-card border border-border rounded-lg px-3 py-2 shadow-lg">
@@ -275,7 +275,7 @@ const Index = () => {
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">Three steps to a better watchlist</h2>
             <p className="text-muted-foreground max-w-lg mx-auto">
-              No more forgotten tabs or screenshots. Just paste, save, and watch.
+              No more forgotten tabs or screenshots. Paste, bookmark, and watch.
             </p>
           </div>
 
@@ -290,8 +290,8 @@ const Index = () => {
             <StepCard
               step={2}
               icon={Bookmark}
-              title="Save to your list"
-              description="Your watchlist in one place. Filter by mood, status, or platform. Add notes and tags anytime."
+              title="Bookmark it instantly"
+              description="Your bookmarks in one place. Filter by mood, status, or platform. Add notes and tags anytime."
               accentClass="text-wm-gold bg-wm-gold/10"
             />
             <StepCard
@@ -337,9 +337,9 @@ const Index = () => {
         <div className="container mx-auto px-4 lg:px-8 max-w-5xl space-y-24">
           <FeatureRow
             icon={Bookmark}
-            tag="INSTANT SAVE"
+            tag="INSTANT BOOKMARK"
             title="Smart auto-enrichment"
-            description="Paste any link and we instantly fetch the title, poster art, runtime, and release year. Add mood tags and notes — then it's saved to your personal watchlist."
+            description="Paste any link and we instantly fetch the title, poster art, runtime, and release year. Add mood tags and notes — then it's bookmarked to your personal watchlist."
             mockup={<EnrichMockup />}
             reversed={false}
           />
@@ -367,7 +367,7 @@ const Index = () => {
         <div className="container mx-auto px-4 lg:px-8">
           <div className="bg-gradient-to-r from-primary/15 via-primary/8 to-wm-gold/8 rounded-3xl border border-primary/20 p-12 text-center">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">
-              Ready to stop forgetting what you wanted to watch?
+              Your bookmark for everything worth watching.
             </h2>
             <p className="text-muted-foreground max-w-md mx-auto mb-8">
               Join WatchMarks for free. No credit card required.

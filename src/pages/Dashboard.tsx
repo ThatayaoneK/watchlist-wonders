@@ -2,18 +2,15 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { format } from "date-fns";
-import { CalendarClock, Shuffle, ArrowUpDown, Play, Check, Eye } from "lucide-react";
+import { CalendarClock, Shuffle, ArrowUpDown, Play, Check } from "lucide-react";
 import { TopNav } from "@/components/layout/TopNav";
 import { HeroBanner } from "@/components/layout/HeroBanner";
 import { Rail } from "@/components/bookmarks/Rail";
 import { SearchOverlay } from "@/components/search/SearchOverlay";
-import { StatsBar } from "@/components/dashboard/StatsBar";
 import { FilterChips } from "@/components/dashboard/FilterChips";
 import { FilterPanel, type AdvancedFilters } from "@/components/dashboard/FilterPanel";
 import { BulkActionBar } from "@/components/dashboard/BulkActionBar";
-import { MoodPicker } from "@/components/dashboard/MoodPicker";
 import { SkeletonRail } from "@/components/ui/skeleton-card";
-import { QuickAddBar } from "@/components/QuickAddBar";
 import { EmptyStateGuide } from "@/components/EmptyStateGuide";
 import { DashboardTour } from "@/components/onboarding/DashboardTour";
 import { useDashboardTour } from "@/hooks/useDashboardTour";
@@ -68,7 +65,6 @@ const Dashboard = () => {
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilters>({
     providers: [], moods: [], runtimeMin: null, runtimeMax: null,
   });
-  const [activeMood, setActiveMood] = useState<string | null>(null);
 
   // Sort + Surprise Me state
   const [sortBy, setSortBy] = useState<SortOption>("newest");
@@ -117,17 +113,6 @@ const Dashboard = () => {
     watching: bookmarks.filter((b) => b.status === "watching").length,
     done: bookmarks.filter((b) => b.status === "done").length,
   }), [bookmarks]);
-
-  // Calculate stats
-  const stats = useMemo(() => ({
-    total: bookmarks.length,
-    backlog: filterCounts.backlog,
-    watching: filterCounts.watching,
-    done: filterCounts.done,
-    totalMinutes: bookmarks
-      .filter((b) => b.status === "done" && b.runtime_minutes)
-      .reduce((sum, b) => sum + (b.runtime_minutes || 0), 0),
-  }), [bookmarks, filterCounts]);
 
   // Apply filters + sort
   const filteredBookmarks = useMemo(() => {
@@ -230,7 +215,7 @@ const Dashboard = () => {
       queryClient.invalidateQueries({ queryKey: ['bookmarks'] });
     },
     onSuccess: () => {
-      toast({ title: "Moved to backlog", description: "Ready to watch again." });
+      toast({ title: "Added back to your list", description: "Ready to watch when you are." });
     },
   });
 
@@ -366,11 +351,6 @@ const Dashboard = () => {
 
   const handleDelete = (bookmark: Bookmark) => {
     deleteMutation.mutate(bookmark);
-  };
-
-  const handleMoodSelect = (mood: string | null) => {
-    setActiveMood(mood);
-    setAdvancedFilters((prev) => ({ ...prev, moods: mood ? [mood] : [] }));
   };
 
   const handleStatusCycle = (bookmark: Bookmark, newStatus: string) => {
@@ -576,51 +556,37 @@ const Dashboard = () => {
 
       {/* Main content area */}
       <div className={cn(
-        "relative z-10 pb-16 space-y-8",
+        "relative z-10 pb-16 space-y-4",
         heroBookmark ? "-mt-24" : "pt-20"
       )}>
 
-        {/* Stats Bar */}
-        {bookmarks.length > 0 && (
-          <StatsBar
-            total={stats.total}
-            backlog={stats.backlog}
-            watching={stats.watching}
-            done={stats.done}
-            totalMinutes={stats.totalMinutes}
-            className="animate-fade-in"
-            onFilter={(status) => {
-              setFilterStatus(status);
-              document.getElementById("filter-toolbar")?.scrollIntoView({ behavior: "smooth", block: "start" });
-            }}
-          />
-        )}
-
-        {/* QuickAddBar — always below StatsBar */}
-        {!isEmpty && (
-          <div className="container mx-auto px-4 lg:px-8 animate-fade-in">
-            <QuickAddBar />
-          </div>
-        )}
-
         {/* Filter Chips + Toolbar */}
         {bookmarks.length > 0 && (
-          <div id="filter-toolbar" className="space-y-2 animate-fade-in">
-            <div className="container mx-auto px-4 lg:px-8 flex items-center justify-between gap-2">
-              <div className="flex-1 min-w-0">
-                <FilterChips
-                  activeType={filterType}
-                  activeStatus={filterStatus}
-                  onTypeChange={setFilterType}
-                  onStatusChange={setFilterStatus}
-                  counts={filterCounts}
-                  className="!px-0"
-                />
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {/* Sort */}
+          <div id="filter-toolbar" className="animate-fade-in">
+            <div className="container mx-auto px-4 lg:px-8 flex items-center gap-3">
+              {/* Scrollable filter pills — takes remaining space */}
+              <FilterChips
+                activeType={filterType}
+                activeStatus={filterStatus}
+                onTypeChange={setFilterType}
+                onStatusChange={setFilterStatus}
+                counts={filterCounts}
+                className="flex-1 min-w-0"
+              />
+              {/* Right controls — always visible, compact */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleSurpriseMe}
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                  title="Surprise me — pick a random title"
+                  aria-label="Surprise me, pick a random title"
+                >
+                  <Shuffle className="w-4 h-4" />
+                </Button>
                 <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
-                  <SelectTrigger className="h-8 text-xs w-[110px] gap-1">
+                  <SelectTrigger className="h-8 text-xs w-[100px] gap-1 border-0 bg-transparent text-muted-foreground hover:text-foreground">
                     <ArrowUpDown className="w-3 h-3 shrink-0" />
                     <SelectValue />
                   </SelectTrigger>
@@ -632,22 +598,11 @@ const Dashboard = () => {
                     <SelectItem value="rating">My Rating</SelectItem>
                   </SelectContent>
                 </Select>
-                {/* Surprise Me */}
                 <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleSurpriseMe}
-                  className="h-8 text-xs gap-1"
-                  title="Pick a random title from your backlog"
-                >
-                  <Shuffle className="w-3 h-3" />
-                  <span className="hidden sm:inline">Surprise</span>
-                </Button>
-                <Button
-                  variant={filterPanelOpen ? "secondary" : "outline"}
+                  variant={filterPanelOpen ? "secondary" : "ghost"}
                   size="sm"
                   onClick={() => setFilterPanelOpen((v) => !v)}
-                  className="h-8 gap-1 text-xs"
+                  className="h-8 gap-1 text-xs text-muted-foreground hover:text-foreground"
                 >
                   Filters
                   {totalActiveFilterCount > 0 && (
@@ -656,43 +611,24 @@ const Dashboard = () => {
                     </span>
                   )}
                 </Button>
-                {hasActiveFilters && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 text-xs text-muted-foreground hover:text-foreground px-2"
-                    onClick={() => {
-                      setFilterType("all");
-                      setFilterStatus("all");
-                      setAdvancedFilters({ providers: [], moods: [], runtimeMin: null, runtimeMax: null });
-                    }}
-                  >
-                    Clear all
-                  </Button>
-                )}
                 <Button
-                  variant={selectMode ? "secondary" : "outline"}
+                  variant={selectMode ? "secondary" : "ghost"}
                   size="sm"
                   onClick={() => { setSelectMode((v) => !v); setSelectedIds(new Set()); }}
-                  className="h-8 text-xs"
+                  className="h-8 text-xs text-muted-foreground hover:text-foreground"
                 >
                   {selectMode ? "Cancel" : "Select"}
                 </Button>
               </div>
             </div>
             {filterPanelOpen && (
-              <FilterPanel
-                onApply={(f) => { setAdvancedFilters(f); setActiveMood(null); }}
-                onReset={() => { setAdvancedFilters({ providers: [], moods: [], runtimeMin: null, runtimeMax: null }); setActiveMood(null); }}
-              />
+              <div className="mt-2">
+                <FilterPanel
+                  onApply={(f) => { setAdvancedFilters(f); }}
+                  onReset={() => { setAdvancedFilters({ providers: [], moods: [], runtimeMin: null, runtimeMax: null }); }}
+                />
+              </div>
             )}
-          </div>
-        )}
-
-        {/* Mood Picker */}
-        {bookmarks.length > 0 && (
-          <div className="container mx-auto px-4 lg:px-8 animate-fade-in">
-            <MoodPicker activeMood={activeMood} onMoodSelect={handleMoodSelect} />
           </div>
         )}
 
@@ -784,30 +720,12 @@ const Dashboard = () => {
             isSelectable={selectMode}
             selectedIds={selectedIds}
             onSelect={toggleSelect}
-            emptyState={!hasActiveFilters && !selectMode && (
-              <section className="py-4">
-                <div className="container mx-auto px-4 lg:px-8">
-                  <h2 className="text-xl font-semibold text-foreground mb-3">Continue Watching</h2>
-                  <div className="flex items-center gap-3 py-3 px-4 rounded-xl border border-dashed border-border text-sm text-muted-foreground">
-                    <Eye className="w-4 h-4 shrink-0" />
-                    <span>Nothing in progress — start something from your backlog</span>
-                    <button
-                      type="button"
-                      onClick={() => document.getElementById("backlog-rail")?.scrollIntoView({ behavior: "smooth" })}
-                      className="ml-auto text-xs text-primary hover:underline shrink-0"
-                    >
-                      Browse backlog →
-                    </button>
-                  </div>
-                </div>
-              </section>
-            )}
           />
 
           <div id="backlog-rail">
             <Rail
               title="Saved for Later"
-              subtitle="Your backlog — ready to watch"
+              subtitle="Ready when you are"
               bookmarks={backlog}
               onSchedule={handleSchedule}
               onMarkDone={handleMarkDone}
@@ -861,17 +779,6 @@ const Dashboard = () => {
             isSelectable={selectMode}
             selectedIds={selectedIds}
             onSelect={toggleSelect}
-            emptyState={!hasActiveFilters && !selectMode && (
-              <section className="py-4">
-                <div className="container mx-auto px-4 lg:px-8">
-                  <h2 className="text-xl font-semibold text-foreground mb-3">Recently Watched</h2>
-                  <div className="flex items-center gap-3 py-3 px-4 rounded-xl border border-dashed border-border text-sm text-muted-foreground">
-                    <Check className="w-4 h-4 shrink-0" />
-                    <span>Finish something to see it here</span>
-                  </div>
-                </div>
-              </section>
-            )}
           />
 
           {/* Filtered empty state */}

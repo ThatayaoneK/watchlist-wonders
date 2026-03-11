@@ -74,20 +74,10 @@ export function Rail({
   }
 
   return (
-    <section className={cn("relative py-6", className)}>
+    <section className={cn("relative py-4", className)}>
       {/* Header */}
-      <div className="container mx-auto px-4 lg:px-8 mb-4">
-        <div className="flex items-baseline justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-foreground">{title}</h2>
-            {subtitle && (
-              <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
-            )}
-          </div>
-          <span className="text-sm text-muted-foreground">
-            {bookmarks.length} item{bookmarks.length !== 1 && "s"}
-          </span>
-        </div>
+      <div className="container mx-auto px-4 lg:px-8 mb-3">
+        <h2 className="text-lg font-bold text-foreground tracking-tight">{title}</h2>
       </div>
 
       {/* Rail Container */}

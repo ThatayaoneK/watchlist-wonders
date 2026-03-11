@@ -357,7 +357,7 @@ export function PosterCard({
         to={`/b/${bookmark.id}`}
         className={cn(
           "group relative block flex-shrink-0 rounded-xl overflow-hidden transition-all duration-300",
-          variant === "poster" ? "w-32 sm:w-36 md:w-40 lg:w-44" : "w-60 sm:w-72 md:w-80",
+          variant === "poster" ? "w-36 sm:w-44 md:w-48 lg:w-56" : "w-64 sm:w-80 md:w-96",
           (isHovered || isTouched) && !isSelectable && "scale-105 z-10 shadow-2xl ring-2 ring-primary/50",
           isSelected && "ring-2 ring-primary",
           className
@@ -480,7 +480,7 @@ export function PosterCard({
               {(bookmark.status === "backlog" || bookmark.status === "scheduled" || bookmark.status === "dropped") && (
                 <>
                   <BookMarked className="w-2.5 h-2.5" />
-                  {bookmark.status === "backlog" ? "Backlog" : bookmark.status === "scheduled" ? "Scheduled" : "Dropped"}
+                  {bookmark.status === "backlog" ? "Want to Watch" : bookmark.status === "scheduled" ? "Scheduled" : "Not for Me"}
                 </>
               )}
             </button>
@@ -563,12 +563,12 @@ export function PosterCard({
                   {bookmark.status === "done" ? (
                     <DropdownMenuItem onClick={onUndoDone}>
                       <Undo2 className="w-4 h-4 mr-2" />
-                      Move to Backlog
+                      Add Back to List
                     </DropdownMenuItem>
                   ) : (
                     <DropdownMenuItem onClick={onMarkDone}>
                       <Check className="w-4 h-4 mr-2" />
-                      Mark as Done
+                      Mark as Watched
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuItem onClick={onAddToPlan}>
@@ -652,12 +652,12 @@ export function PosterCard({
                       {bookmark.status === "done" ? (
                         <DropdownMenuItem onClick={onUndoDone}>
                           <Undo2 className="w-4 h-4 mr-2" />
-                          Move to Backlog
+                          Add Back to List
                         </DropdownMenuItem>
                       ) : (
                         <DropdownMenuItem onClick={onMarkDone}>
                           <Check className="w-4 h-4 mr-2" />
-                          Mark as Done
+                          Mark as Watched
                         </DropdownMenuItem>
                       )}
                       <DropdownMenuItem onClick={onAddToPlan}>
