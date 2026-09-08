@@ -1,3 +1,4 @@
+import { scheduledUsers } from "./scheduledUsers";
 import { getFirestore } from "firebase-admin/firestore";
 import { incrementMetric } from "../admin/metrics";
 
@@ -32,27 +33,29 @@ async function recentEventBookmarkIds(uid: string, now = Date.now()): Promise<Se
     .get();
   const ids = new Set<string>();
   for (const d of snap.docs) {
-    const data = d.data();
+    const raw = d.data();
+    const iso = (value: unknown): string | null => typeof value === "string" ? value : value && typeof value === "object" && "toDate" in value ? (value as { toDate(): Date }).toDate().toISOString() : null;
+    const data = raw.schemaVersion === 2 ? {
+      importance_score: raw.intelligence?.importanceScore, last_viewed_at: iso(raw.intelligence?.lastViewedAt),
+      created_at: iso(raw.createdAt), cluster_id: raw.intelligence?.clusterId, title: raw.media?.title,
+    } : raw;
     if (typeof data.bookmark_id === "string") ids.add(data.bookmark_id);
   }
   return ids;
 }
 
 async function loadCandidates(uid: string): Promise<ResurfaceCandidate[]> {
-  // Order by importance_score DESC so the .limit(200) returns the most
-  // valuable candidates rather than an arbitrary subset. Requires a composite
-  // index on importance_score (single field, descending) — auto-created by
-  // Firestore on first query.
-  const snap = await getFirestore()
-    .collection("users")
-    .doc(uid)
-    .collection("bookmarks")
-    .where("importance_score", ">=", IMPORTANCE_FLOOR)
-    .orderBy("importance_score", "desc")
-    .limit(200)
-    .get();
+  const col = getFirestore().collection("users").doc(uid).collection("bookmarks");
+  const pages = await Promise.all(["importance_score", "intelligence.importanceScore"].map(field =>
+    col.where(field, ">=", IMPORTANCE_FLOOR).orderBy(field, "desc").limit(200).get()));
+  const snap = { docs: [...new Map(pages.flatMap(page => page.docs).map(d => [d.id, d])).values()] };
   return snap.docs.map((d) => {
-    const data = d.data();
+    const raw = d.data();
+    const iso = (value: unknown): string | null => typeof value === "string" ? value : value && typeof value === "object" && "toDate" in value ? (value as { toDate(): Date }).toDate().toISOString() : null;
+    const data = raw.schemaVersion === 2 ? {
+      importance_score: raw.intelligence?.importanceScore, last_viewed_at: iso(raw.intelligence?.lastViewedAt),
+      created_at: iso(raw.createdAt), cluster_id: raw.intelligence?.clusterId, title: raw.media?.title,
+    } : raw;
     return {
       bookmark_id: d.id,
       importance_score: typeof data.importance_score === "number" ? data.importance_score : 0,
@@ -116,7 +119,7 @@ export async function resurfaceForUser(uid: string, now = Date.now()): Promise<{
 }
 
 export async function resurfaceAllUsers(maxUsers = 200): Promise<{ users: number; surfaced: number }> {
-  const usersSnap = await getFirestore().collection("users").limit(maxUsers).get();
+  const usersSnap = await scheduledUsers("resurface", maxUsers);
   let users = 0;
   let surfaced = 0;
   for (const u of usersSnap.docs) {
@@ -128,5 +131,8 @@ export async function resurfaceAllUsers(maxUsers = 200): Promise<{ users: number
     surfaced += r.surfaced;
   }
   await incrementMetric("resurface.run.completed");
+  await usersSnap.complete();
   return { users, surfaced };
 }
+
+

@@ -1,3 +1,4 @@
+import { scheduledUsers } from "./scheduledUsers";
 import { getFirestore } from "firebase-admin/firestore";
 import { generateStructured, isVertexConfigured } from "../ai/vertex";
 import { cosineSimilarity } from "../ai/vectorIndex";
@@ -159,7 +160,7 @@ export async function runOnlineClustering(uid: string): Promise<{ assigned: numb
 }
 
 export async function runReclusteringForAllUsers(maxUsers = 200): Promise<{ users: number; clusters: number }> {
-  const usersSnap = await getFirestore().collection("users").limit(maxUsers).get();
+  const usersSnap = await scheduledUsers("cluster", maxUsers);
   let users = 0;
   let clusters = 0;
   for (const u of usersSnap.docs) {
@@ -170,5 +171,7 @@ export async function runReclusteringForAllUsers(maxUsers = 200): Promise<{ user
     users++;
     clusters += r.seeded;
   }
+  await usersSnap.complete();
   return { users, clusters };
 }
+

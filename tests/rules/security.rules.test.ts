@@ -325,6 +325,15 @@ describe("social graph integrity", () => {
 });
 
 describe("public and administrative boundaries", () => {
+  it("denies orphaned projections immediately after private deletion", async () => {
+    await seed(`users/${ALICE}/bookmarks/shared`, bookmark({ is_public: true, share_token: "deleted-token" }));
+    await seed("publicBookmarkOwners/deleted-token", { uid: ALICE, bookmarkId: "shared" });
+    await seed("publicBookmarks/deleted-token", { title: "Private after deletion" });
+    const publicRef = testEnv.unauthenticatedContext().firestore().doc("publicBookmarks/deleted-token");
+    await assertSucceeds(publicRef.get());
+    await assertSucceeds(testEnv.authenticatedContext(ALICE).firestore().doc(`users/${ALICE}/bookmarks/shared`).delete());
+    await assertFails(publicRef.get());
+  });
   it("exposes only the public projection seeded by trusted server code", async () => {
     const projection = {
       schemaVersion: 1,
@@ -338,6 +347,8 @@ describe("public and administrative boundaries", () => {
       createdAt: "2026-08-23T12:00:00.000Z",
     };
     await seed("publicBookmarks/share-token", projection);
+    await seed("publicBookmarkOwners/share-token", { uid: ALICE, bookmarkId: "shared" });
+    await seed(`users/${ALICE}/bookmarks/shared`, bookmark({ is_public: true, share_token: "share-token" }));
     const snap = await assertSucceeds(
       testEnv.unauthenticatedContext().firestore().doc("publicBookmarks/share-token").get(),
     );
@@ -371,3 +382,4 @@ describe("Storage attachment boundaries", () => {
     await assertFails(aliceStorage.ref(`attachments/${ALICE}/bookmark-a/page.html`).put(new Uint8Array([1]), { contentType: "text/html" }));
   });
 });
+

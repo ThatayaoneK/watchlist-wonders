@@ -164,8 +164,8 @@ const NewBookmark = () => {
   // Duplicate detection
   const selectedTmdbId = toNumericId(metadata.tmdb_id ?? metadata.tmdbId);
   const { data: duplicateBookmark = null } = useQuery({
-    queryKey: queryKeys.bookmarks.duplicate(selectedTmdbId),
-    queryFn: () => bookmarkService.findDuplicateByTmdbId(selectedTmdbId!),
+    queryKey: [...queryKeys.bookmarks.duplicate(selectedTmdbId), type],
+    queryFn: () => bookmarkService.findDuplicateByTmdbId(selectedTmdbId!, type === "series" || type === "episode" ? "tv" : "movie"),
     enabled: selectedTmdbId !== null,
     staleTime: 60 * 1000,
   });
@@ -1050,3 +1050,4 @@ const NewBookmark = () => {
 };
 
 export default NewBookmark;
+

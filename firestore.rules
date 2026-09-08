@@ -500,7 +500,15 @@ service cloud.firestore {
     }
 
     match /publicBookmarks/{shareToken} {
-      allow read: if true;
+      function activeShare() {
+        let owner = get(/databases/$(database)/documents/publicBookmarkOwners/$(shareToken)).data;
+        let bookmark = get(/databases/$(database)/documents/users/$(owner.uid)/bookmarks/$(owner.bookmarkId)).data;
+        return (bookmark.get('schemaVersion', 1) == 2
+          ? bookmark.visibility.isPublic == true && bookmark.visibility.isVaulted == false && bookmark.visibility.shareToken == shareToken
+          : bookmark.is_public == true && bookmark.get('is_vaulted', false) == false && bookmark.share_token == shareToken);
+      }
+      allow get: if activeShare();
+      allow list: if false;
       allow write: if false;
     }
 

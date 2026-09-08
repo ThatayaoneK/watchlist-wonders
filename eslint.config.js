@@ -6,7 +6,7 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   // apps/mobile is its own workspace with its own React-Native toolchain;
-  { ignores: ["dist", "functions/lib", "node_modules", "apps/mobile/**", "packages/shared/dist/**"] },
+  { ignores: ["dist", "functions/lib", "node_modules", "apps/mobile/**", "packages/shared/dist/**", ".firebase/**", "**/*.timestamp-*.mjs"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
@@ -34,3 +34,4 @@ export default tseslint.config(
     },
   },
 );
+

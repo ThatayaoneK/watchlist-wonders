@@ -1,4 +1,5 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { CAPTURE_LEASE_MS, claimDecision } from "./jobLease";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
@@ -106,7 +107,7 @@ function buildBookmark(input: {
     availability: null,
     intelligence: {
       autoTags: [], embeddingRef: null, fingerprint: { source: request.fingerprint }, clusterId: null,
-      importanceScore: null, pendingClusterAssignment: true, pipelineVersion: 2, lastViewedAt: null, viewCount: 0,
+      importanceScore: null, pendingClusterAssignment: true, pipelineVersion: 0, lastViewedAt: null, viewCount: 0,
     },
     createdAt: now,
     updatedAt: now,
@@ -125,8 +126,20 @@ async function finishCapture(job: CaptureJob): Promise<CaptureBookmarkResponse> 
     extraction = { provider: "generic", resolutionStatus: "unresolved", requiresUserSelection: true };
   }
 
-  const existing = await findExistingBookmark(job.uid, normalized.url, extraction.tmdbId);
-  if (existing) return { status: "duplicate", bookmarkId: existing, captureId: job.captureId };
+  const existing = await findExistingBookmark(job.uid, normalized.url, extraction.tmdbId, extraction.mediaType);
+  const existingResponse = async (bookmarkId: string): Promise<CaptureBookmarkResponse> => {
+    const value = (await db.doc(`users/${job.uid}/bookmarks/${bookmarkId}`).get()).data();
+    if (value?.source?.captureId !== job.captureId) return { status: "duplicate", bookmarkId, captureId: job.captureId };
+    if (value.resolution?.status === "matched") return { status: "saved", bookmarkId, captureId: job.captureId };
+    const candidates = (value.resolution?.candidates ?? []).flatMap((candidate: unknown) => {
+      const result = CaptureMatchCandidateSchema.safeParse(candidate);
+      return result.success ? [result.data] : [];
+    }).slice(0, 20);
+    if (candidates.length) return { status: "needs_selection", bookmarkId, captureId: job.captureId, candidates };
+    return { status: "unresolved", bookmarkId, captureId: job.captureId,
+      draft: { url: normalized.url, title: normalized.sharedTitle, text: normalized.sharedText } };
+  };
+  if (existing) return existingResponse(existing);
 
   const bookmarkId = captureBookmarkId({
     url: normalized.url,
@@ -140,7 +153,7 @@ async function finishCapture(job: CaptureJob): Promise<CaptureBookmarkResponse> 
   } catch (error) {
     const code = (error as { code?: string | number }).code;
     if (code === 6 || code === "already-exists" || (error instanceof Error && /already exists/i.test(error.message))) {
-      return { status: "duplicate", bookmarkId, captureId: job.captureId };
+      return existingResponse(bookmarkId);
     }
     throw error;
   }
@@ -165,6 +178,9 @@ export const captureBookmark = onCall<unknown, Promise<CaptureBookmarkResponse>>
     const parsed = CaptureBookmarkRequestSchema.safeParse(request.data);
     if (!parsed.success) throw new HttpsError("invalid-argument", "Invalid capture request.");
     const uid = request.auth.uid;
+    if (parsed.data.expectedOwnerId && parsed.data.expectedOwnerId !== uid) {
+      throw new HttpsError("permission-denied", "Account changed during capture. Please retry.");
+    }
     const captureId = parsed.data.requestId;
     const db = getFirestore();
     const captureRef = db.collection("users").doc(uid).collection("captures").doc(captureId);
@@ -173,11 +189,18 @@ export const captureBookmark = onCall<unknown, Promise<CaptureBookmarkResponse>>
     const response = await db.runTransaction(async (transaction) => {
       const existing = await transaction.get(captureRef);
       if (existing.exists) {
+        if (existing.get("status") === "failed") throw new HttpsError("unavailable", "Capture failed after retries. Please submit it again.");
         const stored = CaptureBookmarkResponseSchema.safeParse(existing.get("response"));
         if (stored.success) return stored.data;
       }
       const processing: CaptureBookmarkResponse = { status: "processing", captureId };
       const now = Timestamp.now();
+      const quotaRef = db.doc(`captureQuotas/${uid}`);
+      const quota = await transaction.get(quotaRef);
+      const windowStart = Math.floor(now.toMillis() / 3_600_000);
+      const count = quota.get("windowStart") === windowStart ? Number(quota.get("count") ?? 0) : 0;
+      if (count >= 120) throw new HttpsError("resource-exhausted", "Capture limit reached. Please try again next hour.");
+      transaction.set(quotaRef, { windowStart, count: count + 1 });
       transaction.set(captureRef, {
         schemaVersion: 2, ownerId: uid, requestId: captureId, surface: parsed.data.surface,
         status: "processing", response: processing, raw: parsed.data, createdAt: now, updatedAt: now,
@@ -203,27 +226,47 @@ export const onCaptureJobCreated = onDocumentCreated(
     const job = snapshot.data() as CaptureJob;
     const db = getFirestore();
     const captureRef = db.collection("users").doc(job.uid).collection("captures").doc(job.captureId);
+    const attemptId = randomUUID();
     const claimed = await db.runTransaction(async (transaction) => {
       const current = await transaction.get(snapshot.ref);
-      if (!current.exists || current.get("state") !== "queued") return false;
-      transaction.update(snapshot.ref, { state: "processing", updatedAt: Timestamp.now() });
+      if (!current.exists) return false;
+      const decision = claimDecision(current.data() ?? {}, Date.now());
+      if (decision === "finished") return false;
+      // Reject active duplicate deliveries so at least one event retries after
+      // the lease expires if the original process terminates without cleanup.
+      if (decision === "busy") throw new Error("Capture lease is still active");
+      if (decision === "failed") {
+        transaction.update(snapshot.ref, { state: "failed", updatedAt: Timestamp.now() });
+        transaction.update(captureRef, { status: "failed", updatedAt: Timestamp.now() });
+        return false;
+      }
+      transaction.update(snapshot.ref, {
+        state: "processing", attemptId, attempts: (current.get("attempts") ?? 0) + 1,
+        leaseExpiresAt: Timestamp.fromMillis(Date.now() + CAPTURE_LEASE_MS), updatedAt: Timestamp.now(),
+      });
       return true;
     });
     if (!claimed) return;
     try {
       const response = await finishCapture(job);
       await db.runTransaction(async (transaction) => {
+        const current = await transaction.get(snapshot.ref);
+        if (current.get("attemptId") !== attemptId) throw new Error("Capture lease was replaced");
         transaction.update(captureRef, { status: response.status, response, updatedAt: Timestamp.now() });
         transaction.update(snapshot.ref, { state: "complete", response, updatedAt: Timestamp.now() });
       });
       await incrementMetric(`capture.v2.status.${response.status}`).catch(() => undefined);
     } catch (error) {
-      await snapshot.ref.update({
-        state: "queued",
-        lastError: error instanceof Error ? error.name : "CaptureWorkerError",
-        updatedAt: Timestamp.now(),
+      await db.runTransaction(async (transaction) => {
+        const current = await transaction.get(snapshot.ref);
+        if (current.get("attemptId") !== attemptId) return;
+        transaction.update(snapshot.ref, {
+          state: "queued", lastError: error instanceof Error ? error.name : "CaptureWorkerError",
+          updatedAt: Timestamp.now(),
+        });
       });
       throw error;
     }
   },
 );
+

@@ -19,16 +19,16 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <StatusBar style="light" />
         {user === undefined ? null : user ? (
-          <Stack
+          <Stack key={user.uid}
             screenOptions={{
               headerStyle: { backgroundColor: "#09090b" },
               headerTintColor: "#fafafa",
               contentStyle: { backgroundColor: "#09090b" },
             }}
           >
-            <Stack.Screen name="index" options={{ title: "Watchmarks" }} />
-            <Stack.Screen name="bookmark/[id]" options={{ title: "Bookmark" }} />
-            <Stack.Screen
+            <Stack key={user.uid}.Screen name="index" options={{ title: "Watchmarks" }} />
+            <Stack key={user.uid}.Screen name="bookmark/[id]" options={{ title: "Bookmark" }} />
+            <Stack key={user.uid}.Screen
               name="capture/[status]"
               options={{ title: "Choose title", presentation: "modal" }}
             />
@@ -40,3 +40,4 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+

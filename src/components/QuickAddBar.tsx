@@ -264,9 +264,13 @@ export function QuickAddBar({
       clientCapturedAt: new Date().toISOString(),
     };
     if (!navigator.onLine) {
-      queueOfflineCapture(request);
-      setCaptureState("offline_queued");
-      setUrl("");
+      try {
+        queueOfflineCapture(request);
+        setCaptureState("offline_queued");
+        setUrl("");
+      } catch (error) {
+        toast.error(getSafeErrorMessage(error, "Could not save offline."));
+      }
       return;
     }
 

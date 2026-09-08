@@ -23,6 +23,7 @@ export { selectResolutionCandidate } from "./resolution/events.js";
 export { tmdbProxy } from "./tmdb.js";
 export { refreshWatchAvailability } from "./availabilityRefresh.js";
 export { setBookmarkSharing, listPublicBookmarks } from "./sharing.js";
+export { onBookmarkDeleted } from "./bookmarkDeletion.js";
 export { reportClientError } from "./clientErrors.js";
 export { migrateBookmarksV2 } from "./migration/bookmarkV2.js";
 export { sendReminders } from "./reminders.js";
@@ -129,27 +130,31 @@ export const retroactivePipeline = onSchedule(
     })();
     const { getFirestore } = await import("firebase-admin/firestore");
     const db = getFirestore();
-    const snap = await db
-      .collectionGroup("bookmarks")
-      .where("pipeline_version", "<", 2)
-      .orderBy("pipeline_version", "asc")
-      .limit(500)
-      .get()
-      .catch(async () => {
-        // pipeline_version may not exist on legacy docs; fall back to enriched=false
-        return db
-          .collectionGroup("bookmarks")
-          .where("enriched", "==", false)
-          .orderBy("created_at", "asc")
-          .limit(500)
-          .get();
-      });
+    const { FieldPath } = await import("firebase-admin/firestore");
+    const cursorRef = db.doc("jobCursors/retroactivePipeline");
+    const cursor = (await cursorRef.get()).get("path");
+    let scan = db.collectionGroup("bookmarks").orderBy(FieldPath.documentId()).limit(100);
+    if (typeof cursor === "string") scan = scan.startAfter(db.doc(cursor));
+    const snap = await scan.get();
     let completed = 0;
     let errors = 0;
     for (const doc of snap.docs) {
       const uid = doc.ref.parent.parent?.id;
       if (!uid) continue;
       const data = doc.data();
+      // Repair ownership for existing share links; orphaned tokens remain denied.
+      const token = data.schemaVersion === 2 ? data.visibility?.shareToken : data.share_token;
+      if (typeof token === "string") {
+        await db.runTransaction(async tx => {
+          const current = await tx.get(doc.ref);
+          const value = current.data();
+          const active = value?.schemaVersion === 2 ? value.visibility?.shareToken : value?.share_token;
+          if (active === token) tx.set(db.doc(`publicBookmarkOwners/${token}`), { uid, bookmarkId: doc.id });
+        });
+      }
+      const version = data.schemaVersion === 2 ? data.intelligence?.pipelineVersion : data.pipeline_version;
+      const fingerprint = data.schemaVersion === 2 ? data.intelligence?.fingerprint : data.fingerprint;
+      if (version >= 2 && fingerprint?.platform) continue;
       const bookmark = toPipelineBookmark(doc.id, uid, data);
       const r = await runIngestionPipeline(bookmark, apiKey).catch((err) => {
         console.warn("[retroactivePipeline] error", doc.id, err instanceof Error ? err.message : err);
@@ -159,6 +164,7 @@ export const retroactivePipeline = onSchedule(
       else if (r.status === "completed" || r.status === "partial") completed++;
       else errors++;
     }
+    await cursorRef.set({ path: snap.size === 100 ? snap.docs[snap.docs.length - 1].ref.path : null });
     console.log("[retroactivePipeline]", { processed: snap.size, completed, errors });
   },
 );
@@ -225,3 +231,4 @@ export const manualRetroactiveEnrich = onRequest(
     }
   },
 );
+

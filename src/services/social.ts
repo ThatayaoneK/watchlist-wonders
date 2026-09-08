@@ -84,58 +84,6 @@ export const socialService = {
     return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as FeedItem);
   },
 
-  /**
-   * Publish a feed item to current user's own feed and each follower's feed.
-   * Chunks into batches of 499 to respect Firestore's 500-op limit.
-   * Retries each chunk with exponential backoff before failing.
-   */
-  async publishFeedItem(
-    item: Omit<FeedItem, 'id'>,
-    followerUids: string[],
-  ): Promise<void> {
-    const myUid = getUid();
-    const created_at = item.created_at || new Date().toISOString();
-    const payload = { ...item, created_at };
-    const allUids = [myUid, ...followerUids];
-    const CHUNK_SIZE = 499;
-    const MAX_RETRIES = 3;
-
-    for (let i = 0; i < allUids.length; i += CHUNK_SIZE) {
-      const chunkIndex = Math.floor(i / CHUNK_SIZE);
-      const chunk = allUids.slice(i, i + CHUNK_SIZE);
-      const batch = writeBatch(db);
-      chunk.forEach((uid) =>
-        batch.set(doc(collection(db, 'feed', uid, 'items')), payload),
-      );
-
-      let lastError: unknown;
-      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-        try {
-          await batch.commit();
-          lastError = undefined;
-          break;
-        } catch (err) {
-          lastError = err;
-          if (attempt < MAX_RETRIES - 1) {
-            await new Promise((resolve) =>
-              setTimeout(resolve, Math.pow(2, attempt) * 200),
-            );
-          }
-        }
-      }
-
-      if (lastError !== undefined) {
-        console.error(
-          `Feed fan-out failed at chunk ${chunkIndex} after ${MAX_RETRIES} attempts:`,
-          lastError,
-        );
-        throw new Error(
-          `Feed fan-out failed at chunk ${chunkIndex}: ${lastError instanceof Error ? lastError.message : String(lastError)}`,
-        );
-      }
-    }
-  },
-
   /** Read public profile for a user. */
   async getUserPublicProfile(uid: string): Promise<PublicProfile | null> {
     const snap = await getDoc(doc(db, 'users', uid, 'profile', 'public'));
@@ -175,3 +123,5 @@ export const socialService = {
     );
   },
 };
+
+

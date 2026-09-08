@@ -43,10 +43,19 @@ export async function fetchUrl(input: string, options: FetchUrlOptions = {}): Pr
   const connectTimeoutMs = options.connectTimeoutMs ?? 3_000;
   const totalTimeoutMs = options.totalTimeoutMs ?? 8_000;
   const allowedContentTypes = options.allowedContentTypes ?? ALLOWED_CONTENT_TYPES;
+  const deadline = Date.now() + totalTimeoutMs;
   let current = input;
 
   for (let redirects = 0; redirects <= maxRedirects; redirects += 1) {
-    const validated = await validateExternalUrl(current, options.resolver);
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) throw new SafeFetchError("The request timed out.", "total_timeout");
+    let dnsTimer: ReturnType<typeof setTimeout> | undefined;
+    const validated = await Promise.race([
+      validateExternalUrl(current, options.resolver),
+      new Promise<never>((_resolve, reject) => {
+        dnsTimer = setTimeout(() => reject(new SafeFetchError("DNS resolution timed out.", "total_timeout")), remaining);
+      }),
+    ]).finally(() => clearTimeout(dnsTimer));
     const pinned = validated.addresses[0];
     const result = await new Promise<FetchedUrl>((resolve, reject) => {
       const transport = validated.url.protocol === "https:" ? https : http;
@@ -62,6 +71,8 @@ export async function fetchUrl(input: string, options: FetchUrlOptions = {}): Pr
         },
         lookup,
       }, (response) => {
+        response.once("error", reject);
+        response.once("aborted", () => reject(new SafeFetchError("Response interrupted.", "response_aborted")));
         const status = response.statusCode ?? 0;
         const location = response.headers.location;
         if (redirectStatuses.has(status) && location) {
@@ -105,7 +116,7 @@ export async function fetchUrl(input: string, options: FetchUrlOptions = {}): Pr
         });
       });
 
-      const totalTimer = setTimeout(() => request.destroy(new SafeFetchError("The request timed out.", "total_timeout")), totalTimeoutMs);
+      const totalTimer = setTimeout(() => request.destroy(new SafeFetchError("The request timed out.", "total_timeout")), Math.max(1, deadline - Date.now()));
       request.once("socket", (socket) => {
         const connectTimer = setTimeout(() => request.destroy(new SafeFetchError("The connection timed out.", "connect_timeout")), connectTimeoutMs);
         const connectedEvent = validated.url.protocol === "https:" ? "secureConnect" : "connect";
@@ -126,3 +137,4 @@ export async function fetchUrl(input: string, options: FetchUrlOptions = {}): Pr
   }
   throw new SafeFetchError("Too many redirects.", "redirect_limit");
 }
+

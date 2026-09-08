@@ -1,59 +1,52 @@
-import {
-  collection,
-  query,
-  orderBy,
-  limit,
-  getDocs,
-  getDoc,
-  doc,
-  updateDoc,
-} from "firebase/firestore";
+import { collection, query, orderBy, limit, startAfter, getDocs, getDoc, doc, type QueryDocumentSnapshot } from "firebase/firestore";
+import { normalizeBookmark } from "@watchmarks/shared/bookmarkNormalizer";
+import type { Bookmark } from "@watchmarks/shared/database";
 import { auth, db } from "./firebase";
 import { selectResolutionCandidate, skipResolutionSelection } from "./functions";
 
-export interface MobileBookmark {
-  id: string;
-  title: string;
-  type: string;
-  provider: string;
-  status: string;
-  poster_url: string | null;
-  backdrop_url: string | null;
-  release_year: number | null;
-  runtime_minutes: number | null;
-  tags: string[];
-  notes: string | null;
-  source_url: string | null;
-  metadata: Record<string, unknown>;
-  created_at: string;
+export type MobileBookmark = Bookmark;
+export interface MobileBookmarkCursor {
+  legacy?: QueryDocumentSnapshot;
+  v2?: QueryDocumentSnapshot;
+  legacyDone?: boolean;
+  v2Done?: boolean;
 }
-
 function uid(): string {
   const user = auth.currentUser;
   if (!user) throw new Error("Not authenticated");
   return user.uid;
 }
-
-function bookmarksCol() {
-  return collection(db, "users", uid(), "bookmarks");
+export async function getSavedBookmarksPage(count = 40, cursor?: MobileBookmarkCursor) {
+  const owner = uid();
+  const col = collection(db, "users", owner, "bookmarks");
+  const read = (field: string, after?: QueryDocumentSnapshot, done?: boolean) => done
+    ? Promise.resolve(null)
+    : getDocs(query(col, orderBy(field, "desc"), limit(Math.max(1, Math.floor(count / 2))), ...(after ? [startAfter(after)] : [])));
+  const [legacy, v2] = await Promise.all([read("created_at", cursor?.legacy, cursor?.legacyDone), read("createdAt", cursor?.v2, cursor?.v2Done)]);
+  if (auth.currentUser?.uid !== owner) throw new Error("Account changed");
+  const pageSize = Math.max(1, Math.floor(count / 2));
+  const next = {
+    legacy: legacy?.docs.at(-1) ?? cursor?.legacy, v2: v2?.docs.at(-1) ?? cursor?.v2,
+    legacyDone: !legacy || legacy.size < pageSize, v2Done: !v2 || v2.size < pageSize,
+  };
+  return {
+    bookmarks: [...new Map([...(legacy?.docs ?? []), ...(v2?.docs ?? [])].map(d => [d.id, normalizeBookmark(d.id, d.data())])).values()]
+      .filter(b => !b.is_vaulted).sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)),
+    nextCursor: next.legacyDone && next.v2Done ? undefined : next,
+  };
 }
-
 export async function getSavedBookmarks(count = 40): Promise<MobileBookmark[]> {
-  const q = query(bookmarksCol(), orderBy("created_at", "desc"), limit(count));
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<MobileBookmark, "id">) }));
+  return (await getSavedBookmarksPage(count)).bookmarks;
 }
-
 export async function getBookmark(id: string): Promise<MobileBookmark | null> {
-  const snap = await getDoc(doc(db, "users", uid(), "bookmarks", id));
-  if (!snap.exists()) return null;
-  return { id: snap.id, ...(snap.data() as Omit<MobileBookmark, "id">) };
+  const owner = uid();
+  const snap = await getDoc(doc(db, "users", owner, "bookmarks", id));
+  if (auth.currentUser?.uid !== owner) throw new Error("Account changed");
+  return snap.exists() ? normalizeBookmark(snap.id, snap.data()) : null;
 }
-
 export async function selectCandidate(bookmarkId: string, candidate: unknown): Promise<void> {
   await selectResolutionCandidate(bookmarkId, candidate);
 }
-
 export async function skipSelection(bookmarkId: string): Promise<void> {
   await skipResolutionSelection(bookmarkId);
 }

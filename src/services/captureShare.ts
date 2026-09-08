@@ -31,6 +31,12 @@ export function waitForCaptureResult(captureId: string, timeoutMs = 45_000): Pro
       reject(new Error("Capture is still processing."));
     }, timeoutMs);
     unsubscribe = onSnapshot(doc(db, "users", uid, "captures", captureId), (snapshot) => {
+      if (snapshot.data()?.status === "failed") {
+        window.clearTimeout(timeout);
+        unsubscribe();
+        reject(new Error("Capture failed after retries. Please save it again."));
+        return;
+      }
       const parsed = CaptureBookmarkResponseSchema.safeParse(snapshot.data()?.response);
       if (!parsed.success || parsed.data.status === "processing") return;
       window.clearTimeout(timeout);
@@ -44,8 +50,10 @@ export function waitForCaptureResult(captureId: string, timeoutMs = 45_000): Pro
   });
 }
 
-export async function captureAndWait(input: CaptureBookmarkRequest): Promise<CaptureBookmarkResponse> {
-  const acknowledged = await captureBookmark(input);
+export async function captureAndWait(input: CaptureBookmarkRequest, expectedUid = auth.currentUser?.uid): Promise<CaptureBookmarkResponse> {
+  if (!expectedUid || auth.currentUser?.uid !== expectedUid) throw new Error("Account changed. Please retry your capture.");
+  const acknowledged = await captureBookmark({ ...input, expectedOwnerId: expectedUid });
+  if (auth.currentUser?.uid !== expectedUid) throw new Error("Account changed. Please retry your capture.");
   return acknowledged.status === "processing" ? waitForCaptureResult(acknowledged.captureId) : acknowledged;
 }
 

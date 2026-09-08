@@ -28,13 +28,13 @@ export default function LibraryPage() {
             <Button asChild className="mt-7"><Link to={`/b/${groups.watchNext.id}`}>Open details</Link></Button>
           </div>
         </section>
-      ) : (
+      ) : groups.allSaved.length === 0 && !query.isError ? (
         <section className="px-5 py-16 text-center sm:px-10">
           <h1 className="text-3xl font-bold">Your library is ready for its first save</h1>
           <p className="mx-auto mt-3 max-w-lg text-white/55">Paste a link or add a title manually. Saved items stay separate from recommendations.</p>
           <Button asChild className="mt-6"><Link to="/new"><Plus className="mr-2 h-4 w-4" />Add a title</Link></Button>
         </section>
-      )}
+      ) : null}
 
       <div className="space-y-10 px-5 py-10 sm:px-10 lg:px-14">
         <div className="flex items-center justify-between gap-4">
@@ -45,6 +45,7 @@ export default function LibraryPage() {
         <LibraryRail title="Recently Saved" bookmarks={groups.recentlySaved} />
         {groups.savedByGenreOrMood.map((group) => <LibraryRail key={group.title} title={group.title} bookmarks={group.bookmarks} />)}
         <LibraryRail title="Needs Attention" bookmarks={groups.unresolved} />
+        <LibraryRail title="All saved" bookmarks={groups.allSaved} />
         {query.hasNextPage && (
           <div className="flex justify-center">
             <Button variant="outline" onClick={() => void query.fetchNextPage()} disabled={query.isFetchingNextPage}>

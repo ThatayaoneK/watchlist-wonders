@@ -45,6 +45,21 @@
       "types": "./dist/types/functions.d.ts",
       "import": "./dist/esm/functions.js",
       "require": "./dist/cjs/functions.js"
+    },
+    "./bookmarkNormalizer": {
+      "require": "./dist/cjs/bookmarkNormalizer.js",
+      "types": "./dist/types/bookmarkNormalizer.d.ts",
+      "import": "./dist/esm/bookmarkNormalizer.js"
+    },
+    "./database": {
+      "require": "./dist/cjs/database.js",
+      "types": "./dist/types/database.d.ts",
+      "import": "./dist/esm/database.js"
+    },
+    "./availability": {
+      "require": "./dist/cjs/availability.js",
+      "types": "./dist/types/availability.d.ts",
+      "import": "./dist/esm/availability.js"
     }
   },
   "dependencies": {

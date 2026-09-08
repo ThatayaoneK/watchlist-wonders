@@ -1,4 +1,4 @@
-import { FieldValue, getFirestore, Timestamp } from "firebase-admin/firestore";
+import { FieldValue, getFirestore, Timestamp, type UpdateData, type DocumentData } from "firebase-admin/firestore";
 import type { TmdbEnrichment } from "../../tmdb/types";
 import { logResolutionEvent } from "../../resolution/events";
 import type {
@@ -49,10 +49,27 @@ export async function persist(
   resolveResult: ResolveResult,
   autoTags: AutoTagResult,
   cluster: ClusterAssignment,
+  completed = true,
 ): Promise<void> {
   const db = getFirestore();
   const ref = db.collection("users").doc(bookmark.userId).collection("bookmarks").doc(bookmark.id);
   const now = new Date().toISOString();
+  const guardedUpdate = async (update: Record<string, unknown>) => db.runTransaction(async tx => {
+    const fresh = await tx.get(ref);
+    if (!fresh.exists) throw new Error("Bookmark deleted during ingestion");
+    const current = fresh.data()!;
+    const protectedResolution = current.schemaVersion === 2
+      ? Boolean(current.source?.captureId) || ["user", "manual"].includes(current.resolution?.selectedBy)
+      : ["user", "manual"].includes(current.metadata?.resolution_selected_by);
+    const safeUpdate = { ...update };
+    if (protectedResolution) {
+      for (const key of Object.keys(safeUpdate)) {
+        if (key.startsWith("resolution.") || key.startsWith("media.") || key.startsWith("metadata.resolution_")
+          || key === "metadata.match_candidates" || ["canonical_entity", "tmdb", "enriched", "enriched_at", "enrich_fail_reason", "title", "type", "poster_url", "release_year", "runtime_minutes"].includes(key)) delete safeUpdate[key];
+      }
+    }
+    tx.update(ref, safeUpdate as UpdateData<DocumentData>);
+  });
   const currentSnap = await ref.get().catch(() => null);
   const currentData = currentSnap?.data() ?? {};
   const currentMetadata =
@@ -73,7 +90,7 @@ export async function persist(
   if (currentData.schemaVersion === 2) {
     const v2Update: Record<string, unknown> = {
       updatedAt: Timestamp.now(),
-      "intelligence.pipelineVersion": PIPELINE_VERSION,
+      "intelligence.pipelineVersion": completed ? PIPELINE_VERSION : 0,
       "intelligence.autoTags": autoTags.tags,
       "intelligence.fingerprint": fp
         ? {
@@ -84,7 +101,7 @@ export async function persist(
             embedding_cache: cluster.clusterId ? null : (fp.textEmbedding.length ? fp.textEmbedding : null),
           }
         : null,
-      "intelligence.embeddingRef": fp?.textEmbeddingId ?? null,
+      "intelligence.embeddingRef": fp?.textEmbedding.length ? fp.textEmbeddingId : null,
       "intelligence.clusterId": cluster.clusterId,
       "intelligence.pendingClusterAssignment": cluster.pending,
     };
@@ -108,7 +125,7 @@ export async function persist(
       }
     }
 
-    await ref.update(v2Update);
+    await guardedUpdate(v2Update);
     if (!userConfirmedResolution) {
       await logResolutionEvent({
         userId: bookmark.userId,
@@ -130,7 +147,7 @@ export async function persist(
 
   const update: Record<string, unknown> = {
     updated_at: now,
-    pipeline_version: PIPELINE_VERSION,
+    pipeline_version: completed ? PIPELINE_VERSION : 0,
     auto_tags: autoTags.tags,
     context: {
       reason: null,
@@ -149,7 +166,7 @@ export async function persist(
           embedding_cache: cluster.clusterId ? null : (fp.textEmbedding.length ? fp.textEmbedding : null),
         }
       : null,
-    embedding_ref: fp?.textEmbeddingId ?? null,
+    embedding_ref: fp?.textEmbedding.length ? fp.textEmbeddingId : null,
     cluster_id: cluster.clusterId,
     pending_cluster_assignment: cluster.pending,
   };
@@ -218,7 +235,7 @@ export async function persist(
     update.importance_score = 0.5;
   }
 
-  await ref.set(update, { merge: true });
+  await guardedUpdate(update);
 
   if (!userConfirmedResolution) {
     await logResolutionEvent({
@@ -258,4 +275,6 @@ export async function bumpView(userId: string, bookmarkId: string): Promise<void
         updated_at: new Date().toISOString(),
       });
 }
+
+
 

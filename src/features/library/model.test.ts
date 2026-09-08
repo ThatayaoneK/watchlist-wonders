@@ -14,6 +14,16 @@ function bookmark(id: number, overrides: Partial<Bookmark> = {}): Bookmark {
 }
 
 describe("buildLibraryGroups", () => {
+  it("keeps all 60 resolved untagged saves reachable and excludes the vault", () => {
+    const saves = Array.from({ length: 60 }, (_, index) => bookmark(index));
+    const result = buildLibraryGroups([...saves, bookmark(61, { is_vaulted: true })]);
+    expect(result.allSaved.map(b => b.id)).toEqual([...saves].reverse().map(b => b.id));
+    expect(result.recentlySaved).toHaveLength(20);
+  });
+  it("shows unresolved v2 captures in Needs Attention even after extraction", () => {
+    const result = buildLibraryGroups([bookmark(1, { enriched: true, metadata: { resolution_status: "needs_selection" } })]);
+    expect(result.unresolved.map(b => b.id)).toEqual(["1"]);
+  });
   it("derives saved-only rails from a 1,000 item fixture without adding recommendations", () => {
     const fixtures = Array.from({ length: 1_000 }, (_, index) => bookmark(index, {
       status: index === 3 ? "watching" : "backlog",

@@ -17,7 +17,8 @@ function genresFor(bookmark: Bookmark): string[] {
 }
 
 export function isUnresolvedBookmark(bookmark: Bookmark): boolean {
-  return bookmark.enriched === false || Boolean(bookmark.enrich_fail_reason);
+  return bookmark.enriched === false || Boolean(bookmark.enrich_fail_reason)
+    || ["unresolved", "needs_selection", "pending", "failed"].includes(String(bookmark.metadata?.resolution_status));
 }
 
 export function buildLibraryGroups(bookmarks: Bookmark[]): {
@@ -26,6 +27,7 @@ export function buildLibraryGroups(bookmarks: Bookmark[]): {
   recentlySaved: Bookmark[];
   savedByGenreOrMood: LibraryGroup[];
   unresolved: Bookmark[];
+  allSaved: Bookmark[];
 } {
   const saved = bookmarks.filter((bookmark) => !bookmark.is_vaulted);
   const watchNext = [...saved]
@@ -51,5 +53,6 @@ export function buildLibraryGroups(bookmarks: Bookmark[]): {
     .slice(0, 8)
     .map(([title, items]) => ({ title, bookmarks: items }));
 
-  return { watchNext, continueWatching, recentlySaved, savedByGenreOrMood, unresolved };
+  const allSaved = [...saved].sort((left, right) => timestamp(right.created_at) - timestamp(left.created_at));
+  return { watchNext, continueWatching, recentlySaved, savedByGenreOrMood, unresolved, allSaved };
 }

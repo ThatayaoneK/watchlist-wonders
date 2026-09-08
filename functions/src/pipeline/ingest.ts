@@ -127,7 +127,7 @@ export async function runIngestionPipeline(
 
   // Stage 8: persist
   try {
-    await persist(bookmark, ctx.extracted, ctx.fingerprint ?? null, ctx.classify, ctx.resolve, ctx.autoTags, ctx.cluster);
+    await persist(bookmark, ctx.extracted, ctx.fingerprint ?? null, ctx.classify, ctx.resolve, ctx.autoTags, ctx.cluster, Object.keys(ctx.errors).length === 0);
     await incrementMetric("pipeline.persist.success");
   } catch (err) {
     ctx.errors.persist = err instanceof Error ? err.message : String(err);
@@ -145,3 +145,4 @@ export async function runIngestionPipeline(
     errors: ctx.errors,
   };
 }
+

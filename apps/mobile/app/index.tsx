@@ -12,12 +12,12 @@ import {
 import { useRouter } from "expo-router";
 import { signOut } from "firebase/auth";
 import { auth } from "../lib/firebase";
-import { getSavedBookmarks, type MobileBookmark } from "../lib/bookmarks";
+import { getSavedBookmarksPage, type MobileBookmarkCursor, type MobileBookmark } from "../lib/bookmarks";
 
 const STATUS_LABELS: Record<string, string> = {
   backlog: "Backlog",
   watching: "Watching",
-  watched: "Watched",
+  done: "Watched",
   dropped: "Dropped",
 };
 
@@ -28,10 +28,13 @@ export default function SavedItemsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [cursor, setCursor] = useState<MobileBookmarkCursor>();
+  const [loadingMore, setLoadingMore] = useState(false);
   const load = useCallback(async () => {
     try {
-      const data = await getSavedBookmarks();
-      setBookmarks(data);
+      const data = await getSavedBookmarksPage();
+      setBookmarks(data.bookmarks);
+      setCursor(data.nextCursor);
       setError(null);
     } catch {
       setError("Could not load bookmarks.");
@@ -71,7 +74,7 @@ export default function SavedItemsScreen() {
           {item.type} · {STATUS_LABELS[item.status] ?? item.status}
           {item.release_year ? ` · ${item.release_year}` : ""}
         </Text>
-        {item.metadata?.capture_status === "needs_selection" ? (
+        {item.metadata?.resolution_status === "needs_selection" ? (
           <Text style={styles.needsSelection}>Needs title match</Text>
         ) : null}
       </View>
@@ -102,6 +105,18 @@ export default function SavedItemsScreen() {
             tintColor="#fafafa"
           />
         }
+        ListFooterComponent={cursor ? (
+          <TouchableOpacity disabled={loadingMore} style={styles.signOut} onPress={async () => {
+            setLoadingMore(true);
+            try {
+              const page = await getSavedBookmarksPage(40, cursor);
+              setBookmarks(previous => [...new Map([...previous, ...page.bookmarks].map(b => [b.id, b])).values()]);
+              setCursor(page.nextCursor);
+              setError(null);
+            } catch { setError("Could not load more bookmarks. Please retry."); }
+            finally { setLoadingMore(false); }
+          }}><Text style={styles.signOutText}>{loadingMore ? "Loading…" : "Load more saved titles"}</Text></TouchableOpacity>
+        ) : null}
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text style={styles.emptyTitle}>Nothing saved yet</Text>
@@ -163,3 +178,4 @@ const styles = StyleSheet.create({
   signOut: { padding: 16, alignItems: "center" },
   signOutText: { color: "#71717a", fontSize: 14 },
 });
+

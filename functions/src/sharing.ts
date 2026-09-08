@@ -102,7 +102,10 @@ export const setBookmarkSharing = onCall(
       const existingToken = typeof existingTokenValue === "string" ? existingTokenValue : null;
 
       if (parsed.data.action === "revoke") {
-        if (existingToken) transaction.delete(db.doc(`publicBookmarks/${existingToken}`));
+        if (existingToken) {
+          transaction.delete(db.doc(`publicBookmarks/${existingToken}`));
+          transaction.delete(db.doc(`publicBookmarkOwners/${existingToken}`));
+        }
         transaction.update(bookmarkRef, isV2
           ? { "visibility.isPublic": false, "visibility.shareToken": null, updatedAt: Timestamp.now() }
           : { is_public: false, share_token: null, updated_at: new Date().toISOString() });
@@ -116,6 +119,7 @@ export const setBookmarkSharing = onCall(
       const token = existingToken ?? randomUUID();
       const projection = buildPublicBookmarkProjection(bookmark, profileSnap.data()?.display_name);
       transaction.set(db.doc(`publicBookmarks/${token}`), projection);
+      transaction.set(db.doc(`publicBookmarkOwners/${token}`), { uid, bookmarkId: parsed.data.bookmarkId });
       transaction.update(bookmarkRef, isV2
         ? { "visibility.isPublic": true, "visibility.shareToken": token, updatedAt: Timestamp.now() }
         : { is_public: true, share_token: token, updated_at: new Date().toISOString() });

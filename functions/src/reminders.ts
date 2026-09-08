@@ -24,7 +24,7 @@ function ensureInit(): void {
 }
 
 /** Max lookahead: schedules whose reminder fires within this window are eligible. */
-const MAX_OFFSET_MINUTES = 120;
+const MAX_OFFSET_MINUTES = 43200;
 
 interface PrivateProfile {
   fcm_token?: string | null;
@@ -284,22 +284,15 @@ export const sendReminders = onSchedule(
     );
 
     // Batch-fetch bookmark titles
-    const bookmarkIds = [...new Set(due.map((d) => d.data.bookmark_id).filter(Boolean))] as string[];
     const bookmarkMap = new Map<string, BookmarkData>();
-    await Promise.all(
-      bookmarkIds.map(async (bid) => {
-        try {
-          // Fetch from first user who has this bookmark (all users share the same bookmark titles)
-          const userWithBookmark = due.find((d) => d.data.bookmark_id === bid);
-          if (!userWithBookmark) return;
-          const snap = await db.doc(`users/${userWithBookmark.uid}/bookmarks/${bid}`).get();
-          if (snap.exists) bookmarkMap.set(bid, (snap.data() as BookmarkData) ?? {});
-        } catch {
-          // ignore
-        }
-      }),
-    );
-
+    const bookmarkKeys = new Map(due.filter(d => d.data.bookmark_id).map(d => [`${d.uid}/${d.data.bookmark_id}`, d]));
+    await Promise.all([...bookmarkKeys].map(async ([key, item]) => {
+      try {
+        const snap = await db.doc(`users/${item.uid}/bookmarks/${item.data.bookmark_id}`).get();
+        const data = snap.data();
+        if (data) bookmarkMap.set(key, { title: data.schemaVersion === 2 ? data.media?.title : data.title });
+      } catch { /* Delivery can still use its generic title. */ }
+    }));
     // Build Resend client (only if needed)
     const emailEnabled = due.some(({ uid }) => profileMap.get(uid)?.email_reminders_enabled);
     let resend: Resend | null = null;
@@ -314,7 +307,7 @@ export const sendReminders = onSchedule(
       due.map(async ({ docRef, uid, data }) => {
         const profile = profileMap.get(uid) ?? {};
         const email = emailMap.get(uid);
-        const bookmark = data.bookmark_id ? bookmarkMap.get(data.bookmark_id) : undefined;
+        const bookmark = data.bookmark_id ? bookmarkMap.get(`${uid}/${data.bookmark_id}`) : undefined;
         const title = bookmark?.title ?? 'Your show';
         const scheduledFor = new Date(data.scheduled_for!);
         const offsetMinutes = data.reminder_offset_minutes ?? 60;
@@ -345,6 +338,7 @@ export const sendReminders = onSchedule(
               })
               .catch((err: unknown) => {
                 logger.warn('[reminders] Push failed', { uid, error: String(err) });
+                throw err;
               }),
           );
         }
@@ -359,11 +353,13 @@ export const sendReminders = onSchedule(
                 subject: notifTitle,
                 html: buildEmailHtml(title, scheduledFor, offsetMinutes, appUrl),
               })
-              .then(() => {
+              .then((result) => {
+                if (result.error) throw new Error(result.error.message);
                 logger.info('[reminders] Email sent via Resend', { uid });
               })
               .catch((err: unknown) => {
                 logger.warn('[reminders] Email failed via Resend', { uid, error: String(err) });
+                throw err;
               }),
           );
         }
@@ -373,7 +369,8 @@ export const sendReminders = onSchedule(
         tasks.push(
           db
             .collection(`users/${uid}/notifications`)
-            .add({
+            .doc(`schedule-${docRef.id}-${scheduledFor.getTime()}`)
+            .set({
               user_id: uid,
               bookmark_id: data.bookmark_id ?? null,
               schedule_id: docRef.id,
@@ -385,6 +382,7 @@ export const sendReminders = onSchedule(
             .then(() => {})
             .catch((err: unknown) => {
               logger.warn('[reminders] Failed to write notification doc', { uid, error: String(err) });
+              throw err;
             }),
         );
 
@@ -416,3 +414,4 @@ export const sendReminders = onSchedule(
     logger.info('[reminders] Run complete', { due: due.length, sent, failed });
   },
 );
+

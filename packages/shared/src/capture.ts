@@ -15,6 +15,7 @@ const CaptureHttpUrlSchema = z.string().url().max(2048).refine((value) => {
 
 export const CaptureBookmarkRequestSchema = z.object({
   requestId: CaptureRequestIdSchema,
+  expectedOwnerId: z.string().min(1).max(128).optional(),
   url: CaptureHttpUrlSchema.optional(),
   sharedText: z.string().max(10000).optional(),
   sharedTitle: z.string().max(500).optional(),

@@ -2,7 +2,7 @@ import { Suspense, lazy } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { SessionQueryProvider } from "@/contexts/SessionQueryProvider";
 import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -43,16 +43,6 @@ const AdminContentGraph = lazy(() => import("./pages/admin/ContentGraph"));
 const AdminRetention = lazy(() => import("./pages/admin/Retention"));
 const PostCapture = lazy(() => import("./pages/PostCapture"));
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 5 * 60 * 1000,
-      gcTime: 10 * 60 * 1000,
-      retry: 1,
-    },
-  },
-});
-
 const PageLoader = () => (
   <div className="min-h-screen bg-background flex items-center justify-center">
     <LoadingSpinner size="lg" />
@@ -82,8 +72,8 @@ function AuthErrorGate({ children }: { children: React.ReactNode }) {
 }
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <AuthProvider>
+  <AuthProvider>
+    <SessionQueryProvider>
       <AuthErrorGate>
       <TooltipProvider>
         <Toaster />
@@ -165,8 +155,8 @@ const App = () => (
         </BrowserRouter>
       </TooltipProvider>
       </AuthErrorGate>
-    </AuthProvider>
-  </QueryClientProvider>
+    </SessionQueryProvider>
+  </AuthProvider>
 );
 
 export default App;

@@ -1,3 +1,4 @@
+import { scheduledUsers } from "./scheduledUsers";
 import { getFirestore } from "firebase-admin/firestore";
 import { incrementMetric } from "../admin/metrics";
 
@@ -105,7 +106,7 @@ export async function recomputeImportance(uid: string): Promise<{ updated: numbe
 }
 
 export async function recomputeAllImportance(maxUsers = 200): Promise<{ users: number; bookmarks: number }> {
-  const usersSnap = await getFirestore().collection("users").limit(maxUsers).get();
+  const usersSnap = await scheduledUsers("importance", maxUsers);
   let users = 0;
   let bookmarks = 0;
   for (const u of usersSnap.docs) {
@@ -117,5 +118,7 @@ export async function recomputeAllImportance(maxUsers = 200): Promise<{ users: n
     bookmarks += r.updated;
   }
   await incrementMetric("importance.run.completed");
+  await usersSnap.complete();
   return { users, bookmarks };
 }
+

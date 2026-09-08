@@ -4,85 +4,231 @@
       "collectionGroup": "bookmarks",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "created_at", "order": "DESCENDING" }
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created_at",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "bookmarks",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "library.state", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
+        {
+          "fieldPath": "library.state",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "notifications",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "read_at", "order": "ASCENDING" },
-        { "fieldPath": "created_at", "order": "DESCENDING" }
+        {
+          "fieldPath": "read_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created_at",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "schedules",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "state", "order": "ASCENDING" },
-        { "fieldPath": "scheduled_for", "order": "ASCENDING" }
+        {
+          "fieldPath": "state",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "scheduled_for",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "schedules",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
-        { "fieldPath": "state", "order": "ASCENDING" },
-        { "fieldPath": "scheduled_for", "order": "ASCENDING" }
+        {
+          "fieldPath": "state",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "scheduled_for",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "bookmarks",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
-        { "fieldPath": "enriched", "order": "ASCENDING" },
-        { "fieldPath": "created_at", "order": "ASCENDING" }
+        {
+          "fieldPath": "enriched",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created_at",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
+      "fields": [
+        {
+          "order": "ASCENDING",
+          "fieldPath": "resolution.externalId"
+        },
+        {
+          "order": "ASCENDING",
+          "fieldPath": "resolution.provider"
+        },
+        {
+          "order": "ASCENDING",
+          "fieldPath": "media.type"
+        }
+      ],
       "collectionGroup": "bookmarks",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        { "fieldPath": "pipeline_version", "order": "ASCENDING" }
-      ]
+      "queryScope": "COLLECTION"
     },
     {
+      "fields": [
+        {
+          "order": "ASCENDING",
+          "fieldPath": "metadata.tmdb_id"
+        },
+        {
+          "order": "ASCENDING",
+          "fieldPath": "type"
+        }
+      ],
       "collectionGroup": "bookmarks",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "pending_cluster_assignment", "order": "ASCENDING" }
-      ]
+      "queryScope": "COLLECTION"
     },
     {
+      "fields": [
+        {
+          "order": "ASCENDING",
+          "fieldPath": "metadata.tmdbId"
+        },
+        {
+          "order": "ASCENDING",
+          "fieldPath": "type"
+        }
+      ],
       "collectionGroup": "bookmarks",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "importance_score", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "resurfaceEvents",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "surfaced_at", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "clusters",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        { "fieldPath": "member_count", "order": "DESCENDING" }
-      ]
+      "queryScope": "COLLECTION"
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "fieldPath": "pipeline_version",
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
+        }
+      ],
+      "collectionGroup": "bookmarks"
+    },
+    {
+      "fieldPath": "pending_cluster_assignment",
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "arrayConfig": "CONTAINS"
+        }
+      ],
+      "collectionGroup": "bookmarks"
+    },
+    {
+      "fieldPath": "importance_score",
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "arrayConfig": "CONTAINS"
+        }
+      ],
+      "collectionGroup": "bookmarks"
+    },
+    {
+      "fieldPath": "surfaced_at",
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "arrayConfig": "CONTAINS"
+        }
+      ],
+      "collectionGroup": "resurfaceEvents"
+    },
+    {
+      "fieldPath": "member_count",
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "DESCENDING"
+        }
+      ],
+      "collectionGroup": "clusters"
+    }
+  ]
 }

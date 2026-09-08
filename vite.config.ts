@@ -26,13 +26,13 @@ export default defineConfig(({ mode }) => ({
         start_url: "/",
         icons: [
           {
-            src: "/favicon.png",
+            src: "/icons/icon-192x192.png",
             sizes: "192x192",
             type: "image/png",
             purpose: "any maskable",
           },
           {
-            src: "/favicon.png",
+            src: "/icons/icon-512x512.png",
             sizes: "512x512",
             type: "image/png",
             purpose: "any maskable",
@@ -52,25 +52,6 @@ export default defineConfig(({ mode }) => ({
         cleanupOutdatedCaches: true,
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         runtimeCaching: [
-          {
-            // Firestore REST API: network-first, 3s timeout
-            urlPattern: /^https:\/\/firestore\.googleapis\.com\//,
-            handler: "NetworkFirst",
-            options: {
-              cacheName: "firestore-cache",
-              networkTimeoutSeconds: 3,
-              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 },
-            },
-          },
-          {
-            // Firebase Storage: cache-first, 7 days
-            urlPattern: /^https:\/\/firebasestorage\.googleapis\.com\//,
-            handler: "CacheFirst",
-            options: {
-              cacheName: "firebase-storage",
-              expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 * 7 },
-            },
-          },
           {
             // TMDB images: cache-first, 30 days
             urlPattern: /^https:\/\/image\.tmdb\.org\//,
@@ -126,3 +107,5 @@ export default defineConfig(({ mode }) => ({
     },
   },
 }));
+
+

@@ -53,6 +53,8 @@ export default function SearchPage() {
         </div>
         {library.isLoading ? (
           <Loader2 className="h-6 w-6 animate-spin text-white/45" aria-label="Loading saved titles" />
+        ) : library.isError ? (
+          <div role="alert"><p>Could not load your saved titles.</p><Button variant="outline" onClick={() => void library.refetch()}>Try again</Button></div>
         ) : results.length ? (
           <div className="grid grid-cols-2 gap-x-3 gap-y-7 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7">
             {results.map((bookmark) => <LibraryCard key={bookmark.id} bookmark={bookmark} />)}

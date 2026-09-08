@@ -201,12 +201,12 @@ export const bookmarkService = {
     return [...new Map(bookmarks.map((bookmark) => [bookmark.id, bookmark])).values()].sort(newestFirst);
   },
 
-  async findDuplicateByTmdbId(tmdbId: number): Promise<Bookmark | null> {
+  async findDuplicateByTmdbId(tmdbId: number, mediaType: "movie" | "tv"): Promise<Bookmark | null> {
     const collectionRef = bookmarksCol(getUid());
     const snapshots = await Promise.all([
-      getDocs(query(collectionRef, where("metadata.tmdb_id", "==", tmdbId), limit(1))),
-      getDocs(query(collectionRef, where("metadata.tmdbId", "==", tmdbId), limit(1))),
-      getDocs(query(collectionRef, where("resolution.externalId", "==", String(tmdbId)), limit(1))),
+      getDocs(query(collectionRef, where("metadata.tmdb_id", "==", tmdbId), where("type", "==", mediaType === "tv" ? "series" : "movie"), limit(1))),
+      getDocs(query(collectionRef, where("metadata.tmdbId", "==", tmdbId), where("type", "==", mediaType === "tv" ? "series" : "movie"), limit(1))),
+      getDocs(query(collectionRef, where("resolution.externalId", "==", String(tmdbId)), where("resolution.provider", "==", "tmdb"), where("media.type", "==", mediaType === "tv" ? "series" : "movie"), limit(1))),
     ]);
     const match = snapshots.flatMap((snapshot) => snapshot.docs).at(0);
     return match ? docToBookmark(match) : null;
@@ -568,9 +568,12 @@ export const bookmarkService = {
   async markAsShown(id: string): Promise<void> {
     const uid = getUid();
     const ref = doc(db, 'users', uid, 'bookmarks', id);
-    await updateDoc(ref, {
-      last_shown_at: new Date().toISOString(),
-      shown_count: increment(1),
+    await runTransaction(db, async tx => {
+      const snap = await tx.get(ref);
+      if (!snap.exists()) return;
+      tx.update(ref, snap.data().schemaVersion === 2
+        ? { "library.lastShownAt": Timestamp.now(), "library.shownCount": increment(1), updatedAt: Timestamp.now() }
+        : { last_shown_at: new Date().toISOString(), shown_count: increment(1) });
     });
   },
 
@@ -606,3 +609,5 @@ export const bookmarkService = {
     };
   },
 };
+
+
