@@ -134,7 +134,7 @@ export function normalizeBookmarkUrl(value: string): string {
     throw new Error("Only HTTP and HTTPS links can be saved.");
   }
 
-  parsed.hostname = parsed.hostname.toLowerCase().replace(/^(www|m)\./, "");
+  parsed.hostname = parsed.hostname.toLowerCase().replace(/^(?:www\.|m\.)+/, "");
   parsed.hash = "";
 
   const trackingParams = [
