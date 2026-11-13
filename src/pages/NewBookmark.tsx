@@ -105,7 +105,7 @@ const NewBookmark = () => {
   const [collectionName, setCollectionName] = useState("");
 
   // Duplicate detection
-  const { data: allBookmarks = [] } = useQuery({
+  const { data: allBookmarks = [], isLoading: bookmarksLoading } = useQuery({
     queryKey: ['bookmarks'],
     queryFn: () => bookmarkService.getBookmarks(),
     staleTime: 60 * 1000,
@@ -190,6 +190,11 @@ const NewBookmark = () => {
     },
     onError: (error: any) => {
       setUploadProgress(0);
+      if (error?.code === "bookmark/already-exists" && error?.bookmarkId) {
+        toast({ title: "Already saved", description: "This link is already in your WatchMarks library." });
+        navigate(`/b/${error.bookmarkId}`);
+        return;
+      }
       toast({
         title: "Error saving",
         description: error.message || "Something went wrong.",
@@ -757,7 +762,7 @@ const NewBookmark = () => {
             form="bookmark-form"
             size="lg"
             className="w-full h-12 text-base gap-2"
-            disabled={createBookmarkMutation.isPending || !title.trim() || !selectedCollectionId || collectionsLoading || collectionsError}
+            disabled={createBookmarkMutation.isPending || bookmarksLoading || !title.trim() || !selectedCollectionId || collectionsLoading || collectionsError}
           >
             {createBookmarkMutation.isPending ? (
               <>
