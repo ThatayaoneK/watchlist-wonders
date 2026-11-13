@@ -21,7 +21,7 @@ export const collectionService = {
 
   async createCollection(name: string): Promise<BookmarkCollection> {
     const uid = getUid();
-    const normalizedName = name.trim().replace(/\\s+/g, " ");
+    const normalizedName = name.trim().replace(/\s+/g, " ");
     if (!normalizedName) throw new Error("Collection name is required");
     if (normalizedName.length > 40) throw new Error("Collection names must be 40 characters or fewer");
 
