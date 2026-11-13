@@ -516,7 +516,7 @@ const NewBookmark = () => {
               <Link to={`/b/${duplicateBookmark.id}`} className="text-primary hover:underline">
                 View "{duplicateBookmark.title}"
               </Link>
-              <span className="text-muted-foreground"> · You can still save another copy.</span>
+              <span className="text-muted-foreground"> · {duplicateUrlBookmark ? "This link is already saved." : "A different link can still be saved."}</span>
             </div>
           </div>
         )}
