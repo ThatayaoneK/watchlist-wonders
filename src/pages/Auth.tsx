@@ -134,7 +134,7 @@ const Auth = () => {
           title: "Welcome back!",
           description: "Successfully signed in.",
         });
-        navigate("/");
+        navigate(returnTo, { replace: true });
       } else {
         await signUp(email.trim(), password);
         toast({
@@ -175,7 +175,7 @@ const Auth = () => {
     try {
       await signInWithGoogle();
       toast({ title: "Welcome!", description: "Successfully signed in with Google." });
-      navigate("/");
+      navigate(returnTo, { replace: true });
     } catch (error: any) {
       if (error.code !== "auth/popup-closed-by-user") {
         setErrors({ form: "Google sign in failed. Please try again." });
