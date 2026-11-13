@@ -36,7 +36,7 @@ export const collectionService = {
     if (!normalizedName) throw new Error("Collection name is required");
     if (normalizedName.length > 40) throw new Error("Collection names must be 40 characters or fewer");
 
-    const key = normalizedName.toLocaleLowerCase();
+    const key = normalizedName.toLowerCase();
     const ref = doc(db, "users", uid, "bookmarkCollections", collectionId(key));
     const now = new Date().toISOString();
 
