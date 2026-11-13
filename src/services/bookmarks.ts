@@ -113,7 +113,12 @@ export const bookmarkService = {
 
       return runTransaction(db, async (transaction) => {
         const existing = await transaction.get(deterministicRef);
-        if (existing.exists()) return docToBookmark(existing);
+        if (existing.exists()) {
+          const duplicateError = new Error("This link is already in your WatchMarks library.") as Error & { code: string; bookmarkId: string };
+          duplicateError.code = "bookmark/already-exists";
+          duplicateError.bookmarkId = existing.id;
+          throw duplicateError;
+        }
 
         transaction.set(deterministicRef, {
           ...data,
