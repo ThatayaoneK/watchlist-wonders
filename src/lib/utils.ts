@@ -118,3 +118,32 @@ export function getMoodEmoji(mood: string): string {
   };
   return moods[mood.toLowerCase()] || "🎬";
 }
+
+
+/**
+ * Normalizes shared URLs for duplicate detection without changing the saved source URL.
+ * Removes fragments and common tracking parameters while preserving content identifiers.
+ */
+export function normalizeBookmarkUrl(value: string): string {
+  const parsed = new URL(value.trim());
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error("Only HTTP and HTTPS links can be saved.");
+  }
+
+  parsed.hostname = parsed.hostname.toLowerCase().replace(/^www\\./, "");
+  parsed.hash = "";
+
+  const trackingParams = [
+    "fbclid", "gclid", "igsh", "igshid", "si", "feature",
+    "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
+    "ref", "ref_src",
+  ];
+  trackingParams.forEach((param) => parsed.searchParams.delete(param));
+  [...parsed.searchParams.keys()].forEach((key) => {
+    if (key.toLowerCase().startsWith("utm_")) parsed.searchParams.delete(key);
+  });
+
+  if (parsed.pathname.length > 1) parsed.pathname = parsed.pathname.replace(/\\/+$/, "");
+  parsed.searchParams.sort();
+  return parsed.toString();
+}
