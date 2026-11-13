@@ -114,15 +114,17 @@ const NewBookmark = () => {
     if (!url.trim()) return null;
     try { return normalizeBookmarkUrl(url); } catch { return null; }
   })();
-  const duplicateBookmark = (normalizedCurrentUrl
+  const duplicateUrlBookmark = normalizedCurrentUrl
     ? allBookmarks.find((bookmark) => {
         try {
           return bookmark.source_url && normalizeBookmarkUrl(bookmark.source_url) === normalizedCurrentUrl;
         } catch { return false; }
       })
-    : null) || (metadata.tmdb_id
-      ? allBookmarks.find((b) => (b.metadata?.tmdb_id ?? b.metadata?.tmdbId) === metadata.tmdb_id)
-      : null);
+    : null;
+  const duplicateTmdbBookmark = metadata.tmdb_id
+    ? allBookmarks.find((b) => (b.metadata?.tmdb_id ?? b.metadata?.tmdbId) === metadata.tmdb_id)
+    : null;
+  const duplicateBookmark = duplicateUrlBookmark || duplicateTmdbBookmark;
 
   const { data: collections = [], isLoading: collectionsLoading, isError: collectionsError } = useQuery({
     queryKey: ["bookmark-collections"],
@@ -144,7 +146,7 @@ const NewBookmark = () => {
       defaultCollectionRequestedRef.current = true;
       createCollectionMutation.mutate("Inbox");
     }
-  }, [collectionsLoading, collectionsError, collections.length]);
+  }, [collectionsLoading, collectionsError, collections.length, createCollectionMutation.mutate]);
   useEffect(() => {
     if (!selectedCollectionId && collections.length > 0) setSelectedCollectionId(collections[0].id);
   }, [collections, selectedCollectionId]);
@@ -177,7 +179,7 @@ const NewBookmark = () => {
     onSuccess: (bookmark) => {
       queryClient.invalidateQueries({ queryKey: ["bookmarks"] });
       setUploadProgress(0);
-      const wasAlreadySaved = duplicateBookmark?.id === bookmark.id;
+      const wasAlreadySaved = duplicateUrlBookmark?.id === bookmark.id;
       toast({
         title: wasAlreadySaved ? "Already in your library" : "Saved to WatchMarks",
         description: wasAlreadySaved ? `"${bookmark.title}" is already saved.` : `"${bookmark.title}" added successfully.`,
@@ -325,6 +327,11 @@ const NewBookmark = () => {
     e.preventDefault();
     if (!title.trim()) {
       toast({ title: "Title required", description: "Please enter a title.", variant: "destructive" });
+      return;
+    }
+    if (duplicateUrlBookmark) {
+      toast({ title: "Already saved", description: "This link is already in your WatchMarks library." });
+      navigate(`/b/${duplicateUrlBookmark.id}`);
       return;
     }
     if (!selectedCollectionId) {
