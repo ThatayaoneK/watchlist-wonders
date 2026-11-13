@@ -1,4 +1,4 @@
-import { addDoc, collection, getDocs, orderBy, query } from "firebase/firestore";
+import { collection, doc, getDocs, orderBy, query, runTransaction } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import type { BookmarkCollection } from "@/types/database";
 
@@ -10,6 +10,17 @@ function getUid(): string {
 
 function collectionsCol(uid: string) {
   return collection(db, "users", uid, "bookmarkCollections");
+}
+
+function collectionId(name: string): string {
+  let first = 0x811c9dc5;
+  let second = 0x9e3779b9;
+  for (let index = 0; index < name.length; index++) {
+    const code = name.charCodeAt(index);
+    first = Math.imul(first ^ code, 0x01000193);
+    second = Math.imul(second ^ (code + index), 0x85ebca6b);
+  }
+  return `name_${(first >>> 0).toString(16)}${(second >>> 0).toString(16)}`;
 }
 
 export const collectionService = {
@@ -25,13 +36,17 @@ export const collectionService = {
     if (!normalizedName) throw new Error("Collection name is required");
     if (normalizedName.length > 40) throw new Error("Collection names must be 40 characters or fewer");
 
-    const existing = await this.getCollections();
-    const match = existing.find((item) => item.name.toLocaleLowerCase() === normalizedName.toLocaleLowerCase());
-    if (match) return match;
-
+    const key = normalizedName.toLocaleLowerCase();
+    const ref = doc(db, "users", uid, "bookmarkCollections", collectionId(key));
     const now = new Date().toISOString();
-    const data = { user_id: uid, name: normalizedName, created_at: now, updated_at: now };
-    const ref = await addDoc(collectionsCol(uid), data);
-    return { id: ref.id, ...data };
+
+    return runTransaction(db, async (transaction) => {
+      const existing = await transaction.get(ref);
+      if (existing.exists()) return { id: existing.id, ...existing.data() } as BookmarkCollection;
+
+      const data = { user_id: uid, name: normalizedName, created_at: now, updated_at: now };
+      transaction.set(ref, data);
+      return { id: ref.id, ...data };
+    });
   },
 };
