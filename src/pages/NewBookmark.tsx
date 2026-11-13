@@ -243,6 +243,13 @@ const NewBookmark = () => {
   const handleFetch = async () => {
     const trimmed = url.trim();
     if (!trimmed) return;
+    try {
+      const parsed = new URL(trimmed);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error("Only web links can be saved.");
+    } catch {
+      setEnrichError("Enter a valid HTTP or HTTPS link.");
+      return;
+    }
 
     autoFetchedUrlRef.current = trimmed;
     setEnrichError(null);
