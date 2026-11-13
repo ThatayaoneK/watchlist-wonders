@@ -142,9 +142,12 @@ export function normalizeBookmarkUrl(value: string): string {
     "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
     "ref_src", "mc_cid", "mc_eid",
   ];
-  trackingParams.forEach((param) => parsed.searchParams.delete(param));
+  const trackingParamSet = new Set(trackingParams);
   [...parsed.searchParams.keys()].forEach((key) => {
-    if (key.toLowerCase().startsWith("utm_")) parsed.searchParams.delete(key);
+    const normalizedKey = key.toLowerCase();
+    if (trackingParamSet.has(normalizedKey) || normalizedKey.startsWith("utm_")) {
+      parsed.searchParams.delete(key);
+    }
   });
 
   if (parsed.pathname.length > 1) parsed.pathname = parsed.pathname.replace(/\/+$/, "");
