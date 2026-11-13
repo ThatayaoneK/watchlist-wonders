@@ -46,20 +46,24 @@ export function getTimeOfDay(): "morning" | "afternoon" | "evening" | "night" {
   return "night";
 }
 
+function hostMatches(hostname: string, domain: string): boolean {
+  return hostname === domain || hostname.endsWith(`.${domain}`);
+}
+
 export function detectProvider(url: string): "youtube" | "imdb" | "netflix" | "instagram" | "facebook" | "x" | "letterboxd" | "tiktok" | "reddit" | "rottentomatoes" | "generic" {
   try {
-    const hostname = new URL(url).hostname.toLowerCase();
+    const hostname = new URL(url).hostname.toLowerCase().replace(/\\.$/, "");
 
-    if (hostname.includes("youtube.com") || hostname.includes("youtu.be")) return "youtube";
-    if (hostname.includes("imdb.com")) return "imdb";
-    if (hostname.includes("netflix.com")) return "netflix";
-    if (hostname.includes("instagram.com")) return "instagram";
-    if (hostname.includes("facebook.com") || hostname.includes("fb.com")) return "facebook";
-    if (hostname.includes("twitter.com") || hostname.includes("x.com")) return "x";
-    if (hostname.includes("letterboxd.com")) return "letterboxd";
-    if (hostname.includes("tiktok.com")) return "tiktok";
-    if (hostname.includes("reddit.com")) return "reddit";
-    if (hostname.includes("rottentomatoes.com")) return "rottentomatoes";
+    if (["youtube.com", "youtu.be"].some((domain) => hostMatches(hostname, domain))) return "youtube";
+    if (hostMatches(hostname, "imdb.com")) return "imdb";
+    if (hostMatches(hostname, "netflix.com")) return "netflix";
+    if (["instagram.com", "instagr.am"].some((domain) => hostMatches(hostname, domain))) return "instagram";
+    if (["facebook.com", "fb.com", "fb.watch"].some((domain) => hostMatches(hostname, domain))) return "facebook";
+    if (["twitter.com", "x.com"].some((domain) => hostMatches(hostname, domain))) return "x";
+    if (hostMatches(hostname, "letterboxd.com")) return "letterboxd";
+    if (hostMatches(hostname, "tiktok.com")) return "tiktok";
+    if (hostMatches(hostname, "reddit.com")) return "reddit";
+    if (hostMatches(hostname, "rottentomatoes.com")) return "rottentomatoes";
 
     return "generic";
   } catch {
@@ -146,4 +150,19 @@ export function normalizeBookmarkUrl(value: string): string {
   if (parsed.pathname.length > 1) parsed.pathname = parsed.pathname.replace(/\\/+$/, "");
   parsed.searchParams.sort();
   return parsed.toString();
+}
+
+
+/** Extracts the first HTTP(S) URL from Android share payload fields. */
+export function extractSharedUrl(urlValue?: string | null, textValue?: string | null): string | null {
+  const textUrl = textValue?.match(/https?:\\/\\/[^\\s<>"']+/i)?.[0];
+  const candidate = (urlValue?.trim() || textUrl || "").replace(/[),.;!?]+$/, "");
+  if (!candidate) return null;
+
+  try {
+    const parsed = new URL(candidate);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.toString() : null;
+  } catch {
+    return null;
+  }
 }
