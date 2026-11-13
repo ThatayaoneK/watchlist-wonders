@@ -17,7 +17,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
-import { detectProvider, getMoodEmoji, cn, normalizeBookmarkUrl } from "@/lib/utils";
+import { detectProvider, getMoodEmoji, cn, normalizeBookmarkUrl, extractSharedUrl } from "@/lib/utils";
 import { auth } from "@/lib/firebase";
 import { fbFunctions } from "@/lib/firebase";
 import { httpsCallable } from "firebase/functions";
@@ -207,18 +207,12 @@ const NewBookmark = () => {
     const incomingTitle = searchParams.get("title");
     if (!incomingUrl && !incomingText && !incomingTitle) return;
 
-    const textUrl = incomingText?.match(/https?:\\/\\/[^\\s<>"']+/i)?.[0];
-    const candidate = (incomingUrl?.trim() || textUrl || "").replace(/[),.;!?]+$/, "");
-    if (candidate) {
-      try {
-        const parsed = new URL(candidate);
-        if (parsed.protocol === "http:" || parsed.protocol === "https:") {
-          setSharedTitle(incomingTitle?.trim() || "");
-          setUrl(parsed.toString());
-        }
-      } catch {
-        setEnrichError("The shared content did not contain a valid web link. Paste the link to continue.");
-      }
+    const sharedUrl = extractSharedUrl(incomingUrl, incomingText);
+    if (sharedUrl) {
+      setSharedTitle(incomingTitle?.trim() || "");
+      setUrl(sharedUrl);
+    } else if (incomingUrl || incomingText) {
+      setEnrichError("The shared content did not contain a valid web link. Paste the link to continue.");
     }
     processedShareRef.current = true;
     setSearchParams({}, { replace: true });
