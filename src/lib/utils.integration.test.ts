@@ -20,6 +20,12 @@ describe('Social Media Integration Tests', () => {
       );
     });
 
+    it('falls back to a valid URL in shared text when the URL field is malformed', () => {
+      expect(extractSharedUrl('not a url', 'See this https://www.facebook.com/watch/?v=123')).toBe(
+        'https://www.facebook.com/watch/?v=123',
+      );
+    });
+
     it('rejects non-web protocols and malformed payloads', () => {
       expect(extractSharedUrl('javascript:alert(1)', null)).toBeNull();
       expect(extractSharedUrl(null, 'No link here')).toBeNull();
@@ -30,6 +36,13 @@ describe('Social Media Integration Tests', () => {
       expect(normalizeBookmarkUrl('https://www.instagram.com/p/ABC123/?utm_source=share&igshid=xyz#comments')).toBe(
         'https://instagram.com/p/ABC123',
       );
+    });
+
+    it('normalizes mobile host aliases and rejects non-web bookmark URLs', () => {
+      expect(normalizeBookmarkUrl('https://m.facebook.com/story.php?id=123')).toBe(
+        'https://facebook.com/story.php?id=123',
+      );
+      expect(() => normalizeBookmarkUrl('javascript:alert(1)')).toThrow();
     });
 
     it('recognizes Facebook short links and rejects lookalike domains', () => {
