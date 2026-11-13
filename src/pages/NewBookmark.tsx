@@ -105,7 +105,7 @@ const NewBookmark = () => {
   const [collectionName, setCollectionName] = useState("");
 
   // Duplicate detection
-  const { data: allBookmarks = [], isLoading: bookmarksLoading } = useQuery({
+  const { data: allBookmarks = [], isLoading: bookmarksLoading, isFetching: bookmarksFetching } = useQuery({
     queryKey: ['bookmarks'],
     queryFn: () => bookmarkService.getBookmarks(),
     staleTime: 60 * 1000,
@@ -179,10 +179,9 @@ const NewBookmark = () => {
     onSuccess: (bookmark) => {
       queryClient.invalidateQueries({ queryKey: ["bookmarks"] });
       setUploadProgress(0);
-      const wasAlreadySaved = duplicateUrlBookmark?.id === bookmark.id;
       toast({
-        title: wasAlreadySaved ? "Already in your library" : "Saved to WatchMarks",
-        description: wasAlreadySaved ? `"${bookmark.title}" is already saved.` : `"${bookmark.title}" added successfully.`,
+        title: "Saved to WatchMarks",
+        description: `"${bookmark.title}" added successfully.`,
       });
       // Offer to schedule
       setSavedBookmark(bookmark);
@@ -769,7 +768,7 @@ const NewBookmark = () => {
             form="bookmark-form"
             size="lg"
             className="w-full h-12 text-base gap-2"
-            disabled={createBookmarkMutation.isPending || bookmarksLoading || !title.trim() || !selectedCollectionId || collectionsLoading || collectionsError}
+            disabled={createBookmarkMutation.isPending || bookmarksLoading || bookmarksFetching || !title.trim() || !selectedCollectionId || collectionsLoading || collectionsError}
           >
             {createBookmarkMutation.isPending ? (
               <>
