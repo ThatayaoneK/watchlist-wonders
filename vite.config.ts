@@ -24,6 +24,12 @@ export default defineConfig(({ mode }) => ({
         background_color: "#0a0a0a",
         display: "standalone",
         start_url: "/",
+        share_target: {
+          action: "/new",
+          method: "GET",
+          enctype: "application/x-www-form-urlencoded",
+          params: { title: "title", text: "text", url: "url" },
+        },
         icons: [
           {
             src: "/favicon.png",

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft, Link as LinkIcon, Loader2, Upload, X, Plus, Clock,
@@ -17,11 +17,12 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
-import { detectProvider, getMoodEmoji, cn } from "@/lib/utils";
+import { detectProvider, getMoodEmoji, cn, normalizeBookmarkUrl, extractSharedUrl } from "@/lib/utils";
 import { auth } from "@/lib/firebase";
 import { fbFunctions } from "@/lib/firebase";
 import { httpsCallable } from "firebase/functions";
 import { bookmarkService } from "@/services/bookmarks";
+import { collectionService } from "@/services/collections";
 import { attachmentService } from "@/services/attachments";
 import { ConfirmMetadataDialog, type ConfirmMetadataPayload } from "@/components/bookmarks/ConfirmMetadataDialog";
 import { QuickScheduleSheet } from "@/components/schedules/QuickScheduleSheet";
@@ -69,6 +70,7 @@ type Step = "paste" | "confirm";
 
 const NewBookmark = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -77,6 +79,7 @@ const NewBookmark = () => {
 
   // URL enrichment state
   const [url, setUrl] = useState("");
+  const [sharedTitle, setSharedTitle] = useState("");
   const [isEnriching, setIsEnriching] = useState(false);
   const [enrichError, setEnrichError] = useState<string | null>(null);
 
@@ -98,16 +101,55 @@ const NewBookmark = () => {
   const [tagInput, setTagInput] = useState("");
   const [moreOptionsOpen, setMoreOptionsOpen] = useState(false);
   const [showAllMoods, setShowAllMoods] = useState(false);
+  const [selectedCollectionId, setSelectedCollectionId] = useState("");
+  const [collectionName, setCollectionName] = useState("");
 
   // Duplicate detection
-  const { data: allBookmarks = [] } = useQuery({
+  const { data: allBookmarks = [], isLoading: bookmarksLoading, isFetching: bookmarksFetching } = useQuery({
     queryKey: ['bookmarks'],
     queryFn: () => bookmarkService.getBookmarks(),
-    staleTime: 60 * 1000,
+    staleTime: 0,
   });
-  const duplicateBookmark = metadata.tmdb_id
+  const normalizedCurrentUrl = (() => {
+    if (!url.trim()) return null;
+    try { return normalizeBookmarkUrl(url); } catch { return null; }
+  })();
+  const duplicateUrlBookmark = normalizedCurrentUrl
+    ? allBookmarks.find((bookmark) => {
+        try {
+          return bookmark.source_url && normalizeBookmarkUrl(bookmark.source_url) === normalizedCurrentUrl;
+        } catch { return false; }
+      })
+    : null;
+  const duplicateTmdbBookmark = metadata.tmdb_id
     ? allBookmarks.find((b) => (b.metadata?.tmdb_id ?? b.metadata?.tmdbId) === metadata.tmdb_id)
     : null;
+  const duplicateBookmark = duplicateUrlBookmark || duplicateTmdbBookmark;
+
+  const { data: collections = [], isLoading: collectionsLoading, isError: collectionsError } = useQuery({
+    queryKey: ["bookmark-collections"],
+    queryFn: () => collectionService.getCollections(),
+    staleTime: 0,
+  });
+  const createCollectionMutation = useMutation({
+    mutationFn: (name: string) => collectionService.createCollection(name),
+    onSuccess: (collection) => {
+      setSelectedCollectionId(collection.id);
+      setCollectionName("");
+      queryClient.invalidateQueries({ queryKey: ["bookmark-collections"] });
+    },
+    onError: (error: Error) => toast({ title: "Could not create collection", description: error.message, variant: "destructive" }),
+  });
+  const defaultCollectionRequestedRef = useRef(false);
+  useEffect(() => {
+    if (!collectionsLoading && !collectionsError && collections.length === 0 && !defaultCollectionRequestedRef.current) {
+      defaultCollectionRequestedRef.current = true;
+      createCollectionMutation.mutate("Inbox");
+    }
+  }, [collectionsLoading, collectionsError, collections.length, createCollectionMutation.mutate]);
+  useEffect(() => {
+    if (!selectedCollectionId && collections.length > 0) setSelectedCollectionId(collections[0].id);
+  }, [collections, selectedCollectionId]);
 
   // Attachment state
   const [attachments, setAttachments] = useState<File[]>([]);
@@ -138,7 +180,7 @@ const NewBookmark = () => {
       queryClient.invalidateQueries({ queryKey: ["bookmarks"] });
       setUploadProgress(0);
       toast({
-        title: "Saved to watchlist!",
+        title: "Saved to WatchMarks",
         description: `"${bookmark.title}" added successfully.`,
       });
       // Offer to schedule
@@ -147,6 +189,11 @@ const NewBookmark = () => {
     },
     onError: (error: any) => {
       setUploadProgress(0);
+      if (error?.code === "bookmark/already-exists" && error?.bookmarkId) {
+        toast({ title: "Already saved", description: "This link is already in your WatchMarks library." });
+        navigate(`/b/${error.bookmarkId}`);
+        return;
+      }
       toast({
         title: "Error saving",
         description: error.message || "Something went wrong.",
@@ -155,7 +202,27 @@ const NewBookmark = () => {
     },
   });
 
-  // Auto-trigger fetch when a valid URL is pasted
+  // Android PWA Share Target: consume the shared URL once, then clear the query string.
+  const processedShareRef = useRef(false);
+  useEffect(() => {
+    if (processedShareRef.current) return;
+    const incomingUrl = searchParams.get("url");
+    const incomingText = searchParams.get("text");
+    const incomingTitle = searchParams.get("title");
+    if (!incomingUrl && !incomingText && !incomingTitle) return;
+
+    const sharedUrl = extractSharedUrl(incomingUrl, incomingText);
+    if (sharedUrl) {
+      setSharedTitle(incomingTitle?.trim() || "");
+      setUrl(sharedUrl);
+    } else if (incomingUrl || incomingText) {
+      setEnrichError("The shared content did not contain a valid web link. Paste the link to continue.");
+    }
+    processedShareRef.current = true;
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  // Auto-trigger fetch when a valid URL is pasted or received from Android sharing.
   const autoFetchedUrlRef = useRef<string>("");
   useEffect(() => {
     const trimmed = url.trim();
@@ -175,6 +242,13 @@ const NewBookmark = () => {
   const handleFetch = async () => {
     const trimmed = url.trim();
     if (!trimmed) return;
+    try {
+      const parsed = new URL(trimmed);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error("Only web links can be saved.");
+    } catch {
+      setEnrichError("Enter a valid HTTP or HTTPS link.");
+      return;
+    }
 
     autoFetchedUrlRef.current = trimmed;
     setEnrichError(null);
@@ -194,7 +268,7 @@ const NewBookmark = () => {
         setConfirmInitial({
           url: trimmed,
           provider: resolvedProvider,
-          title: data.title,
+          title: data.title || sharedTitle,
           posterUrl: data.posterUrl,
           runtimeMinutes: data.runtimeMinutes,
           type: dp === "youtube" ? "video" : "movie",
@@ -225,7 +299,7 @@ const NewBookmark = () => {
       setStep("confirm");
     } catch (error: any) {
       const dp2 = detectProvider(trimmed);
-      setConfirmInitial({ url: trimmed, provider: dp2, type: dp2 === "youtube" ? "video" : "movie", debugMessage: error?.message });
+      setConfirmInitial({ url: trimmed, provider: dp2, title: sharedTitle, type: dp2 === "youtube" ? "video" : "movie", debugMessage: error?.message });
       setConfirmOpen(true);
     } finally {
       setIsEnriching(false);
@@ -260,12 +334,22 @@ const NewBookmark = () => {
       toast({ title: "Title required", description: "Please enter a title.", variant: "destructive" });
       return;
     }
+    if (duplicateUrlBookmark) {
+      toast({ title: "Already saved", description: "This link is already in your WatchMarks library." });
+      navigate(`/b/${duplicateUrlBookmark.id}`);
+      return;
+    }
+    if (!selectedCollectionId) {
+      toast({ title: "Choose a collection", description: "Select or create a collection before saving.", variant: "destructive" });
+      return;
+    }
     createBookmarkMutation.mutate({
       title: title.trim(),
       type,
       provider,
       source_url: url || null,
       canonical_url: canonicalUrl,
+      collection_id: selectedCollectionId,
       runtime_minutes: runtimeMinutes,
       release_year: releaseYear,
       poster_url: posterUrl || null,
@@ -431,11 +515,32 @@ const NewBookmark = () => {
               <Link to={`/b/${duplicateBookmark.id}`} className="text-primary hover:underline">
                 View "{duplicateBookmark.title}"
               </Link>
-              <span className="text-muted-foreground"> · You can still save another copy.</span>
+              <span className="text-muted-foreground"> · {duplicateUrlBookmark ? "This link is already saved." : "A different link can still be saved."}</span>
             </div>
           </div>
         )}
         <form id="bookmark-form" onSubmit={handleSubmit}>
+          <div className="mb-6 rounded-xl border border-border bg-card p-4 space-y-3">
+            <div className="space-y-1">
+              <Label htmlFor="bookmark-collection">Save to collection</Label>
+              <Select value={selectedCollectionId} onValueChange={setSelectedCollectionId} disabled={collectionsLoading || collections.length === 0}>
+                <SelectTrigger id="bookmark-collection"><SelectValue placeholder={collectionsLoading ? "Loading collections…" : "Choose a collection"} /></SelectTrigger>
+                <SelectContent>
+                  {collections.map((collection) => (
+                    <SelectItem key={collection.id} value={collection.id}>{collection.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {collectionsError && <p className="text-xs text-destructive">Collections could not be loaded. Check your connection and retry.</p>}
+            </div>
+            <div className="flex gap-2">
+              <Input value={collectionName} onChange={(event) => setCollectionName(event.target.value)} maxLength={40} placeholder="Create a collection…" aria-label="New collection name" />
+              <Button type="button" variant="outline" disabled={!collectionName.trim() || createCollectionMutation.isPending} onClick={() => createCollectionMutation.mutate(collectionName)}>
+                {createCollectionMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                <span className="ml-1">Create</span>
+              </Button>
+            </div>
+          </div>
           <div className="grid md:grid-cols-[200px_1fr] gap-8">
             {/* Left: Poster preview */}
             <div className="flex flex-col items-center gap-4">
@@ -663,7 +768,7 @@ const NewBookmark = () => {
             form="bookmark-form"
             size="lg"
             className="w-full h-12 text-base gap-2"
-            disabled={createBookmarkMutation.isPending || !title.trim()}
+            disabled={createBookmarkMutation.isPending || bookmarksLoading || bookmarksFetching || !title.trim() || !selectedCollectionId || collectionsLoading || collectionsError}
           >
             {createBookmarkMutation.isPending ? (
               <>

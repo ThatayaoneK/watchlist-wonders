@@ -6,6 +6,7 @@ export interface Bookmark {
   provider: "youtube" | "imdb" | "netflix" | "instagram" | "facebook" | "x" | "letterboxd" | "tiktok" | "reddit" | "rottentomatoes" | "generic";
   source_url: string | null;
   canonical_url: string | null;
+  collection_id?: string | null;
   platform_label: string | null;
   status: "backlog" | "scheduled" | "watching" | "done" | "dropped";
   runtime_minutes: number | null;
@@ -28,6 +29,14 @@ export interface Bookmark {
   // Sharing
   is_public?: boolean;
   share_token?: string;
+}
+
+export interface BookmarkCollection {
+  id: string;
+  user_id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Attachment {
