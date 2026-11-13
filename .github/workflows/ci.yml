@@ -24,3 +24,5 @@ jobs:
         run: npm ci
       - name: Build production bundle
         run: npm run build
+      - name: Test share-capture utilities
+        run: npx --yes vitest@2.1.9 run src/lib/utils.integration.test.ts
