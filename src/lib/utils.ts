@@ -52,7 +52,7 @@ function hostMatches(hostname: string, domain: string): boolean {
 
 export function detectProvider(url: string): "youtube" | "imdb" | "netflix" | "instagram" | "facebook" | "x" | "letterboxd" | "tiktok" | "reddit" | "rottentomatoes" | "generic" {
   try {
-    const hostname = new URL(url).hostname.toLowerCase().replace(/\\.$/, "");
+    const hostname = new URL(url).hostname.toLowerCase().replace(/\.$/, "");
 
     if (["youtube.com", "youtu.be"].some((domain) => hostMatches(hostname, domain))) return "youtube";
     if (hostMatches(hostname, "imdb.com")) return "imdb";
@@ -134,7 +134,7 @@ export function normalizeBookmarkUrl(value: string): string {
     throw new Error("Only HTTP and HTTPS links can be saved.");
   }
 
-  parsed.hostname = parsed.hostname.toLowerCase().replace(/^www\\./, "");
+  parsed.hostname = parsed.hostname.toLowerCase().replace(/^www\./, "");
   parsed.hash = "";
 
   const trackingParams = [
@@ -147,7 +147,7 @@ export function normalizeBookmarkUrl(value: string): string {
     if (key.toLowerCase().startsWith("utm_")) parsed.searchParams.delete(key);
   });
 
-  if (parsed.pathname.length > 1) parsed.pathname = parsed.pathname.replace(/\\/+$/, "");
+  if (parsed.pathname.length > 1) parsed.pathname = parsed.pathname.replace(/\/+$/, "");
   parsed.searchParams.sort();
   return parsed.toString();
 }
@@ -155,7 +155,7 @@ export function normalizeBookmarkUrl(value: string): string {
 
 /** Extracts the first HTTP(S) URL from Android share payload fields. */
 export function extractSharedUrl(urlValue?: string | null, textValue?: string | null): string | null {
-  const textUrl = textValue?.match(/https?:\\/\\/[^\\s<>"']+/i)?.[0];
+  const textUrl = textValue?.match(/https?:\/\/[^\s<>"']+/i)?.[0];
   const candidate = (urlValue?.trim() || textUrl || "").replace(/[),.;!?]+$/, "");
   if (!candidate) return null;
 
