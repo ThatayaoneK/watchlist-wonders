@@ -134,13 +134,13 @@ export function normalizeBookmarkUrl(value: string): string {
     throw new Error("Only HTTP and HTTPS links can be saved.");
   }
 
-  parsed.hostname = parsed.hostname.toLowerCase().replace(/^www\./, "");
+  parsed.hostname = parsed.hostname.toLowerCase().replace(/^(www|m)\./, "");
   parsed.hash = "";
 
   const trackingParams = [
     "fbclid", "gclid", "igsh", "igshid", "si", "feature",
     "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
-    "ref", "ref_src",
+    "ref_src", "mc_cid", "mc_eid",
   ];
   trackingParams.forEach((param) => parsed.searchParams.delete(param));
   [...parsed.searchParams.keys()].forEach((key) => {
@@ -155,14 +155,18 @@ export function normalizeBookmarkUrl(value: string): string {
 
 /** Extracts the first HTTP(S) URL from Android share payload fields. */
 export function extractSharedUrl(urlValue?: string | null, textValue?: string | null): string | null {
-  const textUrl = textValue?.match(/https?:\/\/[^\s<>"']+/i)?.[0];
-  const candidate = (urlValue?.trim() || textUrl || "").replace(/[),.;!?]+$/, "");
-  if (!candidate) return null;
+  const urlPattern = /https?:\/\/[^\s<>"']+/i;
+  const candidates = [urlValue?.trim(), urlValue?.match(urlPattern)?.[0], textValue?.match(urlPattern)?.[0]];
 
-  try {
-    const parsed = new URL(candidate);
-    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.toString() : null;
-  } catch {
-    return null;
+  for (const rawCandidate of candidates) {
+    const candidate = rawCandidate?.replace(/[),.;!?]+$/, "");
+    if (!candidate) continue;
+    try {
+      const parsed = new URL(candidate);
+      if (parsed.protocol === "http:" || parsed.protocol === "https:") return parsed.toString();
+    } catch {
+      // Try the next available shared field.
+    }
   }
+  return null;
 }
