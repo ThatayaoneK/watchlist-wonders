@@ -108,7 +108,7 @@ const NewBookmark = () => {
   const { data: allBookmarks = [], isLoading: bookmarksLoading, isFetching: bookmarksFetching } = useQuery({
     queryKey: ['bookmarks'],
     queryFn: () => bookmarkService.getBookmarks(),
-    staleTime: 60 * 1000,
+    staleTime: 0,
   });
   const normalizedCurrentUrl = (() => {
     if (!url.trim()) return null;
@@ -129,7 +129,7 @@ const NewBookmark = () => {
   const { data: collections = [], isLoading: collectionsLoading, isError: collectionsError } = useQuery({
     queryKey: ["bookmark-collections"],
     queryFn: () => collectionService.getCollections(),
-    staleTime: 60 * 1000,
+    staleTime: 0,
   });
   const createCollectionMutation = useMutation({
     mutationFn: (name: string) => collectionService.createCollection(name),
