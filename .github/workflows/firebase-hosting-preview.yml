@@ -27,7 +27,8 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Verify Firebase deployment secrets
+      - name: Check Firebase deployment configuration
+        id: firebase-config
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_WATCH_WONDERS }}
           VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
@@ -40,16 +41,26 @@ jobs:
           missing=0
           for name in FIREBASE_SERVICE_ACCOUNT VITE_FIREBASE_API_KEY VITE_FIREBASE_AUTH_DOMAIN VITE_FIREBASE_PROJECT_ID VITE_FIREBASE_STORAGE_BUCKET VITE_FIREBASE_MESSAGING_SENDER_ID VITE_FIREBASE_APP_ID; do
             if [ -z "${!name}" ]; then
-              echo "::error::Missing GitHub Actions secret: $name"
+              echo "::warning::Preview deployment is waiting for repository secret: $name"
               missing=1
             fi
           done
-          exit "$missing"
+          if [ "$missing" -eq 0 ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Explain skipped preview deployment
+        if: steps.firebase-config.outputs.ready != 'true'
+        run: echo "::notice::Add the required Firebase Actions secrets in repository Settings > Secrets and variables > Actions to enable preview deployments."
 
       - name: Install dependencies
+        if: steps.firebase-config.outputs.ready == 'true'
         run: npm ci
 
       - name: Deploy isolated Firebase Hosting preview
+        if: steps.firebase-config.outputs.ready == 'true'
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
