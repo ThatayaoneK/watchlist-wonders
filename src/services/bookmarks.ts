@@ -10,9 +10,11 @@ import {
   where,
   orderBy,
   increment,
+  runTransaction,
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { Bookmark } from '@/types/database';
+import { normalizeBookmarkUrl } from '@/lib/utils';
 
 function getUid(): string {
   const user = auth.currentUser;
@@ -26,6 +28,16 @@ function bookmarksCol(uid: string) {
 
 function docToBookmark(snap: any): Bookmark {
   return { id: snap.id, ...snap.data() } as Bookmark;
+}
+
+function stableUrlId(value: string): string {
+  // FNV-1a 32-bit hash: deterministic, compact, and scoped to the user's bookmarks path.
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index++) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `shared_${(hash >>> 0).toString(16).padStart(8, "0")}`;
 }
 
 export const bookmarkService = {
@@ -91,6 +103,26 @@ export const bookmarkService = {
       created_at: now,
       updated_at: now,
     };
+    if (bookmark.source_url) {
+      const normalizedUrl = normalizeBookmarkUrl(bookmark.source_url);
+      const deterministicRef = doc(db, "users", uid, "bookmarks", stableUrlId(normalizedUrl));
+
+      return runTransaction(db, async (transaction) => {
+        const existing = await transaction.get(deterministicRef);
+        if (existing.exists()) return docToBookmark(existing);
+
+        transaction.set(deterministicRef, {
+          ...data,
+          metadata: { ...data.metadata, normalized_source_url: normalizedUrl },
+        });
+        return {
+          id: deterministicRef.id,
+          ...data,
+          metadata: { ...data.metadata, normalized_source_url: normalizedUrl },
+        } as Bookmark;
+      });
+    }
+
     const ref = await addDoc(bookmarksCol(uid), data);
     return { id: ref.id, ...data } as Bookmark;
   },
