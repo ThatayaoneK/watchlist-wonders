@@ -31,13 +31,16 @@ function docToBookmark(snap: any): Bookmark {
 }
 
 function stableUrlId(value: string): string {
-  // FNV-1a 32-bit hash: deterministic, compact, and scoped to the user's bookmarks path.
-  let hash = 0x811c9dc5;
+  // Two independently mixed 32-bit hashes keep deterministic Firestore IDs compact
+  // while materially reducing collision risk versus a single 32-bit hash.
+  let first = 0x811c9dc5;
+  let second = 0x9e3779b9;
   for (let index = 0; index < value.length; index++) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193);
+    const code = value.charCodeAt(index);
+    first = Math.imul(first ^ code, 0x01000193);
+    second = Math.imul(second ^ (code + index), 0x85ebca6b);
   }
-  return `shared_${(hash >>> 0).toString(16).padStart(8, "0")}`;
+  return `shared_${(first >>> 0).toString(16)}${(second >>> 0).toString(16)}`;
 }
 
 export const bookmarkService = {
@@ -87,6 +90,7 @@ export const bookmarkService = {
       provider: bookmark.provider || 'generic',
       source_url: bookmark.source_url ?? null,
       canonical_url: bookmark.canonical_url ?? null,
+      collection_id: bookmark.collection_id ?? null,
       platform_label: bookmark.platform_label ?? null,
       status: bookmark.status || 'backlog',
       runtime_minutes: bookmark.runtime_minutes ?? null,
