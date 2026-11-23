@@ -16,6 +16,7 @@ concurrency:
 
 jobs:
   preview:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -65,7 +66,7 @@ jobs:
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_WATCH_WONDERS }}
-          projectId: watch-wonders
+          projectId: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
           channelId: pr-${{ github.event.pull_request.number }}
           expires: 7d
         env:
