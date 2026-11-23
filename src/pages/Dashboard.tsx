@@ -16,6 +16,7 @@ import { DashboardTour } from "@/components/onboarding/DashboardTour";
 import { useDashboardTour } from "@/hooks/useDashboardTour";
 import { CompletionSheet } from "@/components/bookmarks/CompletionSheet";
 import { bookmarkService } from "@/services/bookmarks";
+import { collectionService } from "@/services/collections";
 import { scheduleService } from "@/services/schedules";
 import { ScheduleDialog } from "@/components/schedules/ScheduleDialog";
 import { watchPlanService } from "@/services/watchPlans";
@@ -61,6 +62,7 @@ const Dashboard = () => {
   // Filter state
   const [filterType, setFilterType] = useState<FilterType>("all");
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
+  const [selectedCollectionFilter, setSelectedCollectionFilter] = useState("all");
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilters>({
     providers: [], moods: [], runtimeMin: null, runtimeMax: null,
@@ -81,6 +83,13 @@ const Dashboard = () => {
   const { data: bookmarks = [], isLoading, error, refetch } = useQuery({
     queryKey: ['bookmarks'],
     queryFn: () => bookmarkService.getBookmarks(),
+  });
+
+  // Fetch personal bookmark collections for the collection filter.
+  const { data: bookmarkCollections = [] } = useQuery({
+    queryKey: ["bookmark-collections"],
+    queryFn: () => collectionService.getCollections(),
+    staleTime: 60 * 1000,
   });
 
   // Fetch upcoming schedules for "Up Next" rail
@@ -125,7 +134,8 @@ const Dashboard = () => {
     const filtered = bookmarks.filter((b) => {
       const typeMatch = filterType === "all" || b.type === filterType;
       const statusMatch = filterStatus === "all" || b.status === filterStatus;
-      if (!typeMatch || !statusMatch) return false;
+      const collectionMatch = selectedCollectionFilter === "all" || b.collection_id === selectedCollectionFilter;
+      if (!typeMatch || !statusMatch || !collectionMatch) return false;
       if (!hasAdvanced) return true;
       const providerMatch = advancedFilters.providers.length === 0 || advancedFilters.providers.includes(b.provider);
       const moodMatch = advancedFilters.moods.length === 0 || (b.mood_tags || []).some((m) => advancedFilters.moods.includes(m));
@@ -146,7 +156,7 @@ const Dashboard = () => {
         default: return b.created_at.localeCompare(a.created_at); // newest
       }
     });
-  }, [bookmarks, filterType, filterStatus, advancedFilters, sortBy]);
+  }, [bookmarks, filterType, filterStatus, selectedCollectionFilter, advancedFilters, sortBy]);
 
   // Mark as done mutation
   const markDoneMutation = useMutation({
@@ -489,6 +499,7 @@ const Dashboard = () => {
   const hasActiveFilters =
     filterType !== "all" ||
     filterStatus !== "all" ||
+    selectedCollectionFilter !== "all" ||
     advancedFilters.providers.length > 0 ||
     advancedFilters.moods.length > 0 ||
     advancedFilters.runtimeMin !== null ||
@@ -497,6 +508,7 @@ const Dashboard = () => {
   const totalActiveFilterCount =
     (filterType !== "all" ? 1 : 0) +
     (filterStatus !== "all" ? 1 : 0) +
+    (selectedCollectionFilter !== "all" ? 1 : 0) +
     advancedFilters.providers.length +
     advancedFilters.moods.length +
     (advancedFilters.runtimeMin !== null ? 1 : 0) +
@@ -621,6 +633,22 @@ const Dashboard = () => {
                 </Button>
               </div>
             </div>
+            {bookmarkCollections.length > 0 && (
+              <div className="container mx-auto px-4 lg:px-8 mt-3 flex items-center gap-3">
+                <Label htmlFor="dashboard-collection-filter" className="text-xs text-muted-foreground shrink-0">Collection</Label>
+                <Select value={selectedCollectionFilter} onValueChange={setSelectedCollectionFilter}>
+                  <SelectTrigger id="dashboard-collection-filter" className="h-9 max-w-xs text-sm">
+                    <SelectValue placeholder="All collections" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All collections</SelectItem>
+                    {bookmarkCollections.map((collection) => (
+                      <SelectItem key={collection.id} value={collection.id}>{collection.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             {filterPanelOpen && (
               <div className="mt-2">
                 <FilterPanel

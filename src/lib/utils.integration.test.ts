@@ -4,9 +4,53 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { detectProvider, extractYouTubeVideoId, extractImdbId } from '@/lib/utils';
+import { detectProvider, extractYouTubeVideoId, extractImdbId, normalizeBookmarkUrl, extractSharedUrl } from '@/lib/utils';
 
 describe('Social Media Integration Tests', () => {
+  describe('Android Share Target URL handling', () => {
+    it('extracts a URL from shared text with a caption', () => {
+      expect(extractSharedUrl(null, 'Check this out https://www.instagram.com/reel/ABC123/?igsh=abc')).toBe(
+        'https://www.instagram.com/reel/ABC123/?igsh=abc',
+      );
+    });
+
+    it('prefers the dedicated shared URL field', () => {
+      expect(extractSharedUrl('https://youtu.be/dQw4w9WgXcQ', 'A different link https://example.com')).toBe(
+        'https://youtu.be/dQw4w9WgXcQ',
+      );
+    });
+
+    it('falls back to a valid URL in shared text when the URL field is malformed', () => {
+      expect(extractSharedUrl('not a url', 'See this https://www.facebook.com/watch/?v=123')).toBe(
+        'https://www.facebook.com/watch/?v=123',
+      );
+    });
+
+    it('rejects non-web protocols and malformed payloads', () => {
+      expect(extractSharedUrl('javascript:alert(1)', null)).toBeNull();
+      expect(extractSharedUrl(null, 'No link here')).toBeNull();
+      expect(extractSharedUrl('not a url', null)).toBeNull();
+    });
+
+    it('normalizes tracking parameters and fragments for duplicate checks', () => {
+      expect(normalizeBookmarkUrl('https://www.instagram.com/p/ABC123/?utm_source=share&igshid=xyz#comments')).toBe(
+        'https://instagram.com/p/ABC123',
+      );
+    });
+
+    it('normalizes mobile host aliases and rejects non-web bookmark URLs', () => {
+      expect(normalizeBookmarkUrl('https://m.facebook.com/story.php?id=123')).toBe(
+        'https://facebook.com/story.php?id=123',
+      );
+      expect(() => normalizeBookmarkUrl('javascript:alert(1)')).toThrow();
+    });
+
+    it('recognizes Facebook short links and rejects lookalike domains', () => {
+      expect(detectProvider('https://fb.watch/abc123/')).toBe('facebook');
+      expect(detectProvider('https://notinstagram.com/p/ABC123')).toBe('generic');
+    });
+  });
+
   describe('URL Detection', () => {
     it('should detect YouTube URLs correctly', () => {
       const urls = [

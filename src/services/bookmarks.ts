@@ -10,9 +10,11 @@ import {
   where,
   orderBy,
   increment,
+  runTransaction,
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { Bookmark } from '@/types/database';
+import { normalizeBookmarkUrl } from '@/lib/utils';
 
 function getUid(): string {
   const user = auth.currentUser;
@@ -26,6 +28,19 @@ function bookmarksCol(uid: string) {
 
 function docToBookmark(snap: any): Bookmark {
   return { id: snap.id, ...snap.data() } as Bookmark;
+}
+
+function stableUrlId(value: string): string {
+  // Two independently mixed 32-bit hashes keep deterministic Firestore IDs compact
+  // while materially reducing collision risk versus a single 32-bit hash.
+  let first = 0x811c9dc5;
+  let second = 0x9e3779b9;
+  for (let index = 0; index < value.length; index++) {
+    const code = value.charCodeAt(index);
+    first = Math.imul(first ^ code, 0x01000193);
+    second = Math.imul(second ^ (code + index), 0x85ebca6b);
+  }
+  return `shared_${(first >>> 0).toString(16)}${(second >>> 0).toString(16)}`;
 }
 
 export const bookmarkService = {
@@ -75,6 +90,7 @@ export const bookmarkService = {
       provider: bookmark.provider || 'generic',
       source_url: bookmark.source_url ?? null,
       canonical_url: bookmark.canonical_url ?? null,
+      collection_id: bookmark.collection_id ?? null,
       platform_label: bookmark.platform_label ?? null,
       status: bookmark.status || 'backlog',
       runtime_minutes: bookmark.runtime_minutes ?? null,
@@ -91,6 +107,31 @@ export const bookmarkService = {
       created_at: now,
       updated_at: now,
     };
+    if (bookmark.source_url) {
+      const normalizedUrl = normalizeBookmarkUrl(bookmark.source_url);
+      const deterministicRef = doc(db, "users", uid, "bookmarks", stableUrlId(normalizedUrl));
+
+      return runTransaction(db, async (transaction) => {
+        const existing = await transaction.get(deterministicRef);
+        if (existing.exists()) {
+          const duplicateError = new Error("This link is already in your WatchMarks library.") as Error & { code: string; bookmarkId: string };
+          duplicateError.code = "bookmark/already-exists";
+          duplicateError.bookmarkId = existing.id;
+          throw duplicateError;
+        }
+
+        transaction.set(deterministicRef, {
+          ...data,
+          metadata: { ...data.metadata, normalized_source_url: normalizedUrl },
+        });
+        return {
+          id: deterministicRef.id,
+          ...data,
+          metadata: { ...data.metadata, normalized_source_url: normalizedUrl },
+        } as Bookmark;
+      });
+    }
+
     const ref = await addDoc(bookmarksCol(uid), data);
     return { id: ref.id, ...data } as Bookmark;
   },
