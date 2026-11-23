@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { TmdbCandidatePicker } from "@/components/bookmarks/TmdbCandidatePicker";
 import { detectProvider } from "@/lib/utils";
 import { captureAndWait, confirmCaptureCandidate } from "@/services/captureShare";
-import type { CaptureBookmarkResponse } from "@watchmarks/shared/capture";
+import { extractSharedUrl, type CaptureBookmarkResponse } from "@watchmarks/shared/capture";
 import type { Bookmark } from "@/types/database";
 import { storage } from "@/lib/storage";
 
@@ -40,12 +40,6 @@ const PROVIDER_MARKS: Record<Bookmark["provider"], string> = {
   generic: "WEB",
 };
 
-function extractUrlFromText(text: string): string | null {
-  const match = text.match(/https?:\/\/[^\s)]+/i);
-  if (!match?.[0]) return null;
-  return match[0].replace(/[.,!?]+$/, "");
-}
-
 type ShareViewState = "capturing" | "needs_selection" | "saved" | "duplicate" | "unresolved" | "error";
 
 const ShareTarget = () => {
@@ -69,7 +63,7 @@ const ShareTarget = () => {
   const sharedTitle = searchParams.get("title") ?? "";
 
   const targetUrl = useMemo(
-    () => sharedUrl || extractUrlFromText(sharedText) || "",
+    () => extractSharedUrl(sharedUrl, sharedText) ?? "",
     [sharedUrl, sharedText],
   );
   const hasSharePayload = Boolean(sharedUrl || sharedText || sharedTitle);
@@ -140,7 +134,7 @@ const ShareTarget = () => {
       try {
         const result = await captureAndWait({
           requestId: requestIdRef.current,
-          url: sharedUrl || undefined,
+          url: targetUrl || undefined,
           sharedText: sharedText || undefined,
           sharedTitle: sharedTitle || undefined,
           surface: "pwa_share",
@@ -182,6 +176,7 @@ const ShareTarget = () => {
     sharedText,
     sharedTitle,
     sharedUrl,
+    targetUrl,
     toast,
     user,
   ]);

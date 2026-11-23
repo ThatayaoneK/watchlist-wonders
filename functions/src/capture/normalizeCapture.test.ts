@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { CaptureBookmarkRequestSchema, CaptureBookmarkResponseSchema } from "@watchmarks/shared";
+import {
+  CaptureBookmarkRequestSchema,
+  CaptureBookmarkResponseSchema,
+  extractSharedUrl,
+  normalizeSharedUrl,
+} from "@watchmarks/shared";
 import { captureBookmarkId } from "./deduplicate";
 import { normalizeCaptureRequest } from "./normalizeCapture";
 
@@ -16,6 +21,31 @@ describe("Capture v2 contract", () => {
     const second = normalizeCaptureRequest(request);
     expect(first.url).toBe("https://example.com/movie");
     expect(second.fingerprint).toBe(first.fingerprint);
+  });
+
+  it("extracts a usable URL from a fallback share field", () => {
+    expect(extractSharedUrl("not a URL", "Watch <https://m.www.example.com/movie?utm_Source=share> now"))
+      .toBe("https://m.www.example.com/movie?utm_Source=share");
+  });
+
+  it("uses the same duplicate key for mobile/www aliases and tracking parameters", () => {
+    expect(normalizeSharedUrl("https://m.www.example.com/movie/?utm_Source=share&ID=42#details"))
+      .toBe(normalizeSharedUrl("https://example.com/movie?ID=42"));
+  });
+
+  it("uses a canonical URL for duplicate fingerprints while retaining the source URL", () => {
+    const mobileUrl = normalizeCaptureRequest({
+      ...request,
+      url: "https://m.www.example.com/movie/?utm_Source=share&ID=42#details",
+    });
+    const canonicalUrl = normalizeCaptureRequest({
+      ...request,
+      url: "https://example.com/movie?ID=42",
+    });
+
+    expect(mobileUrl.url).toBe("https://m.www.example.com/movie/?utm_Source=share&ID=42");
+    expect(mobileUrl.dedupeUrl).toBe("https://example.com/movie?ID=42");
+    expect(mobileUrl.fingerprint).toBe(canonicalUrl.fingerprint);
   });
 
   it("deduplicates independent request IDs by canonical source", () => {

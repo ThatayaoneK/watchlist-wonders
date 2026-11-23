@@ -126,7 +126,13 @@ async function finishCapture(job: CaptureJob): Promise<CaptureBookmarkResponse> 
     extraction = { provider: "generic", resolutionStatus: "unresolved", requiresUserSelection: true };
   }
 
-  const existing = await findExistingBookmark(job.uid, normalized.url, extraction.tmdbId, extraction.mediaType);
+  const bookmarkId = captureBookmarkId({
+    url: normalized.dedupeUrl,
+    title: normalized.sharedTitle ?? normalized.sharedText,
+    tmdbId: extraction.tmdbId,
+    mediaType: extraction.mediaType,
+  });
+  const bookmarkRef = db.collection("users").doc(job.uid).collection("bookmarks").doc(bookmarkId);
   const existingResponse = async (bookmarkId: string): Promise<CaptureBookmarkResponse> => {
     const value = (await db.doc(`users/${job.uid}/bookmarks/${bookmarkId}`).get()).data();
     if (value?.source?.captureId !== job.captureId) return { status: "duplicate", bookmarkId, captureId: job.captureId };
@@ -139,15 +145,9 @@ async function finishCapture(job: CaptureJob): Promise<CaptureBookmarkResponse> 
     return { status: "unresolved", bookmarkId, captureId: job.captureId,
       draft: { url: normalized.url, title: normalized.sharedTitle, text: normalized.sharedText } };
   };
+  const existing = await findExistingBookmark(job.uid, normalized.url, extraction.tmdbId, extraction.mediaType);
   if (existing) return existingResponse(existing);
-
-  const bookmarkId = captureBookmarkId({
-    url: normalized.url,
-    title: normalized.sharedTitle ?? normalized.sharedText,
-    tmdbId: extraction.tmdbId,
-    mediaType: extraction.mediaType,
-  });
-  const bookmarkRef = db.collection("users").doc(job.uid).collection("bookmarks").doc(bookmarkId);
+  if ((await bookmarkRef.get()).exists) return existingResponse(bookmarkId);
   try {
     await bookmarkRef.create(buildBookmark({ uid: job.uid, captureId: job.captureId, request: normalized, result: extraction }));
   } catch (error) {

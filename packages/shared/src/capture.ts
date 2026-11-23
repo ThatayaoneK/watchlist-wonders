@@ -13,6 +13,58 @@ const CaptureHttpUrlSchema = z.string().url().max(2048).refine((value) => {
   return protocol === "http:" || protocol === "https:";
 }, "Only HTTP and HTTPS URLs are supported.");
 
+const trackingParamNames = new Set([
+  "fbclid",
+  "gclid",
+  "igsh",
+  "igshid",
+  "si",
+  "feature",
+  "ref_src",
+  "mc_cid",
+  "mc_eid",
+]);
+
+export function extractSharedUrl(urlValue?: string | null, textValue?: string | null): string | null {
+  const urlPattern = /https?:\/\/[^\s<>"']+/i;
+  const candidates = [urlValue?.trim(), urlValue?.match(urlPattern)?.[0], textValue?.match(urlPattern)?.[0]];
+
+  for (const rawCandidate of candidates) {
+    const candidate = rawCandidate?.replace(/[),.;!?]+$/, "");
+    if (!candidate) continue;
+
+    try {
+      const parsed = new URL(candidate);
+      if (parsed.protocol === "http:" || parsed.protocol === "https:") return parsed.toString();
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+export function normalizeSharedUrl(value: string): string {
+  const parsed = new URL(value.trim());
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error("Only HTTP and HTTPS links can be saved.");
+  }
+
+  parsed.hostname = parsed.hostname.toLowerCase().replace(/^(?:(?:www|m)\.)+/, "");
+  parsed.hash = "";
+
+  for (const key of [...parsed.searchParams.keys()]) {
+    const normalizedKey = key.toLowerCase();
+    if (normalizedKey.startsWith("utm_") || trackingParamNames.has(normalizedKey)) {
+      parsed.searchParams.delete(key);
+    }
+  }
+
+  if (parsed.pathname.length > 1) parsed.pathname = parsed.pathname.replace(/\/+$/, "");
+  parsed.searchParams.sort();
+  return parsed.toString();
+}
+
 export const CaptureBookmarkRequestSchema = z.object({
   requestId: CaptureRequestIdSchema,
   expectedOwnerId: z.string().min(1).max(128).optional(),
