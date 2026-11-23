@@ -169,18 +169,51 @@ const Stats = () => {
 
   if (isError) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-foreground font-medium">Failed to load stats</p>
-          <p className="text-muted-foreground text-sm mt-2">Please try again later</p>
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <div className="max-w-sm w-full text-center space-y-5">
+          <div className="flex justify-center">
+            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+              <BarChart2 className="w-8 h-8 text-muted-foreground" aria-hidden="true" />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <p className="font-semibold text-foreground">Couldn't load your stats</p>
+            <p className="text-sm text-muted-foreground">Check your connection and try again.</p>
+          </div>
+          <Button onClick={() => navigate(-1)} className="w-full sm:w-auto">
+            Go back
+          </Button>
         </div>
       </div>
     );
   }
+  if (stats.total === 0) {
+    return (
+      <div className="min-h-screen bg-background pt-[68px] flex items-center justify-center px-4">
+        <div className="max-w-sm w-full text-center space-y-5">
+          <div className="flex justify-center">
+            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+              <BarChart2 className="w-8 h-8 text-muted-foreground" aria-hidden="true" />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <p className="font-semibold text-foreground">No stats yet</p>
+            <p className="text-sm text-muted-foreground">
+              Add bookmarks to your watchlist to see your stats here.
+            </p>
+          </div>
+          <Button onClick={() => navigate("/new")} className="w-full sm:w-auto">
+            Add first bookmark
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-background pb-24 md:pb-8">
+    <div className="min-h-screen bg-background pb-24 md:pb-8 pt-[68px]">
       {/* Header */}
-      <div className="sticky top-0 z-40 bg-background/95 backdrop-blur border-b border-border">
+      <div className="sticky top-[68px] z-40 bg-background/95 backdrop-blur border-b border-border">
         <div className="container mx-auto px-4 lg:px-8 flex items-center gap-4 h-16">
           <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
             <ArrowLeft className="w-5 h-5" />

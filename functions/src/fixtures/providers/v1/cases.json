@@ -1,0 +1,10 @@
+[
+  { "id": "youtube-valid", "provider": "youtube", "scenario": "valid", "status": 200, "contentType": "application/json" },
+  { "id": "og-missing-fields", "provider": "generic", "scenario": "missing_metadata", "status": 200, "contentType": "text/html" },
+  { "id": "redirect-private", "provider": "generic", "scenario": "redirect", "status": 302, "location": "http://169.254.169.254/latest/meta-data" },
+  { "id": "availability-region", "provider": "availability", "scenario": "region_blocked", "status": 451, "region": "ZA" },
+  { "id": "imdb-deleted", "provider": "imdb", "scenario": "deleted", "status": 404, "contentType": "text/html" },
+  { "id": "tmdb-rate-limit", "provider": "tmdb", "scenario": "rate_limit", "status": 429, "contentType": "application/json" },
+  { "id": "tiktok-markup-change", "provider": "tiktok", "scenario": "markup_change", "status": 200, "contentType": "text/html" },
+  { "id": "embedded-credentials", "provider": "generic", "scenario": "malicious", "url": "https://user:pass@example.com/watch" }
+]

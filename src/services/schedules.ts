@@ -11,9 +11,13 @@ import {
   orderBy,
   limit,
   documentId,
+  type DocumentData,
+  type QueryDocumentSnapshot,
+  type DocumentSnapshot,
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { Schedule, Bookmark } from '@/types/database';
+import { normalizeBookmark } from '@/services/bookmarkNormalizer';
 
 type ScheduleWithBookmark = Schedule & { bookmarks: Bookmark };
 
@@ -35,10 +39,14 @@ async function batchAttachBookmarks(uid: string, schedules: Schedule[]): Promise
   for (let i = 0; i < bookmarkIds.length; i += CHUNK) {
     const chunk = bookmarkIds.slice(i, i + CHUNK);
     const bq = query(collection(db, 'users', uid, 'bookmarks'), where(documentId(), 'in', chunk));
-    const bSnap = await getDocs(bq);
-    bSnap.docs.forEach((d) => {
-      bookmarkMap.set(d.id, { id: d.id, ...d.data() } as Bookmark);
-    });
+    try {
+      const bSnap = await getDocs(bq);
+      bSnap.docs.forEach((d) => {
+        bookmarkMap.set(d.id, normalizeBookmark(d.id, d.data()));
+      });
+    } catch (err) {
+      console.error(`[schedules] Failed to fetch bookmark chunk starting at index ${i}:`, err);
+    }
   }
   return schedules
     .filter((s) => {
@@ -51,7 +59,9 @@ async function batchAttachBookmarks(uid: string, schedules: Schedule[]): Promise
     .map((s) => ({ ...s, bookmarks: bookmarkMap.get(s.bookmark_id)! }));
 }
 
-function docToSchedule(snap: any): Schedule {
+function docToSchedule(
+  snap: QueryDocumentSnapshot<DocumentData> | DocumentSnapshot<DocumentData>,
+): Schedule {
   return { id: snap.id, ...snap.data() } as Schedule;
 }
 
@@ -126,6 +136,7 @@ export const scheduleService = {
     const ref = doc(db, 'users', uid, 'schedules', id);
     await updateDoc(ref, { ...updates, updated_at: new Date().toISOString() });
     const snap = await getDoc(ref);
+    if (!snap.exists()) throw new Error(`Schedule ${id} not found after update`);
     return docToSchedule(snap);
   },
 
@@ -148,6 +159,7 @@ export const scheduleService = {
    * Snooze a schedule
    */
   async snoozeSchedule(id: string, snoozeMinutes: number): Promise<Schedule> {
+    if (snoozeMinutes <= 0) throw new Error('snoozeMinutes must be a positive number');
     const uid = getUid();
     const snap = await getDoc(doc(db, 'users', uid, 'schedules', id));
     if (!snap.exists()) throw new Error('Schedule not found');
@@ -176,6 +188,24 @@ export const scheduleService = {
       where('scheduled_for', '>=', today.toISOString()),
       where('scheduled_for', '<', tomorrow.toISOString()),
       orderBy('scheduled_for', 'asc'),
+    );
+    const snap = await getDocs(q);
+    return batchAttachBookmarks(uid, snap.docs.map(docToSchedule));
+  },
+
+  /**
+   * Get schedules that were missed (scheduled_for < today, still in 'scheduled' state)
+   */
+  async getMissedSchedules(): Promise<ScheduleWithBookmark[]> {
+    const uid = getUid();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const q = query(
+      schedulesCol(uid),
+      where('state', '==', 'scheduled'),
+      where('scheduled_for', '<', today.toISOString()),
+      orderBy('scheduled_for', 'desc'),
+      limit(10),
     );
     const snap = await getDocs(q);
     return batchAttachBookmarks(uid, snap.docs.map(docToSchedule));

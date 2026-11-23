@@ -87,7 +87,7 @@ ${colorConfig
   .map(([key, itemConfig]) => {
     const raw = itemConfig.theme?.[theme as keyof typeof itemConfig.theme] || itemConfig.color;
     const color = raw ? sanitizeColor(raw) : null;
-    return color ? `  --color-${key}: ${color};` : null;
+    return color ? `  --color-${sanitizeId(key)}: ${color};` : null;
   })
   .filter(Boolean)
   .join("\n")}

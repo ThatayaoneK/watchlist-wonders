@@ -1,25 +1,542 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // User's own data — full access
-    match /users/{uid}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+    function signedIn() {
+      return request.auth != null;
     }
 
-    // Public bookmarks — anyone can read if is_public == true
+    function owns(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return signedIn() && request.auth.token.admin == true;
+    }
+
+    function validOptionalString(data, field, maxLength) {
+      return !(field in data) || data[field] == null
+        || (data[field] is string && data[field].size() <= maxLength);
+    }
+
+    function isBookmarkV2(data) {
+      return 'schemaVersion' in data && data.schemaVersion == 2;
+    }
+
+    function validBookmark(data, uid) {
+      return data.keys().hasAll([
+          'title', 'type', 'provider', 'status', 'tags', 'mood_tags',
+          'metadata', 'user_id', 'is_public', 'is_vaulted', 'priority',
+          'queue_status', 'progress_percent', 'created_at', 'updated_at'
+        ])
+        && data.keys().hasOnly([
+          'title', 'type', 'provider', 'source_url', 'canonical_url',
+          'platform_label', 'status', 'runtime_minutes', 'release_year',
+          'poster_url', 'backdrop_url', 'tags', 'mood_tags', 'notes',
+          'metadata', 'user_id', 'is_public', 'share_token', 'is_vaulted',
+          'last_shown_at', 'shown_count', 'user_rating', 'user_review',
+          'watched_at', 'priority', 'queue_status', 'progress_percent',
+          'availability', 'enriched', 'enriched_at', 'enrich_fail_reason',
+          'tmdb', 'context', 'auto_tags', 'embedding_ref', 'fingerprint',
+          'canonical_entity', 'cluster_id', 'last_viewed_at', 'view_count',
+          'importance_score', 'pending_cluster_assignment', 'pipeline_version',
+          'created_at', 'updated_at'
+        ])
+        && data.user_id == uid
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 300
+        && data.type in ['movie', 'series', 'episode', 'video', 'doc', 'other']
+        && data.provider in ['youtube', 'imdb', 'netflix', 'instagram', 'facebook', 'x', 'letterboxd', 'tiktok', 'reddit', 'rottentomatoes', 'generic']
+        && data.status in ['backlog', 'scheduled', 'watching', 'done', 'dropped']
+        && data.tags is list && data.tags.size() <= 50
+        && data.mood_tags is list && data.mood_tags.size() <= 25
+        && data.metadata is map && data.metadata.keys().size() <= 40
+        && data.is_public is bool && data.is_vaulted is bool
+        && !(data.is_public && data.is_vaulted)
+        && data.priority is number && data.priority >= -100000 && data.priority <= 100000
+        && data.queue_status in ['queued', 'up_next', 'in_progress', 'completed']
+        && data.progress_percent is number && data.progress_percent >= 0 && data.progress_percent <= 100
+        && data.created_at is string && data.created_at.size() <= 40
+        && data.updated_at is string && data.updated_at.size() <= 40
+        && validOptionalString(data, 'source_url', 2048)
+        && validOptionalString(data, 'canonical_url', 2048)
+        && validOptionalString(data, 'platform_label', 100)
+        && validOptionalString(data, 'poster_url', 2048)
+        && validOptionalString(data, 'backdrop_url', 2048)
+        && validOptionalString(data, 'notes', 10000)
+        && validOptionalString(data, 'user_review', 10000)
+        && (!('user_rating' in data) || data.user_rating == null
+          || (data.user_rating is int && data.user_rating >= 1 && data.user_rating <= 5));
+    }
+
+    function validClientBookmarkCreate(data, uid) {
+      return validBookmark(data, uid)
+        && data.is_public == false
+        && data.metadata.keys().hasOnly([
+          'episodes_watched', 'total_episodes', 'trailer_url',
+          'youtube_trailer_url', 'watched_with', 'lifecycle_state',
+          'lifecycle_updated_at'
+        ])
+        && (!('share_token' in data) || data.share_token == null)
+        && (!('availability' in data) || data.availability == null)
+        && (!('enriched' in data) || data.enriched == false)
+        && (!('enriched_at' in data) || data.enriched_at == null)
+        && (!('enrich_fail_reason' in data) || data.enrich_fail_reason == null)
+        && (!('tmdb' in data) || data.tmdb == null)
+        && (!('auto_tags' in data) || data.auto_tags.size() == 0)
+        && (!('embedding_ref' in data) || data.embedding_ref == null)
+        && (!('fingerprint' in data) || data.fingerprint == null)
+        && (!('canonical_entity' in data) || data.canonical_entity == null)
+        && (!('cluster_id' in data) || data.cluster_id == null)
+        && (!('context' in data) || data.context == null)
+        && (!('last_viewed_at' in data) || data.last_viewed_at == null)
+        && (!('view_count' in data) || data.view_count == 0)
+        && (!('importance_score' in data) || data.importance_score == 0)
+        && (!('pending_cluster_assignment' in data) || data.pending_cluster_assignment == false)
+        && (!('pipeline_version' in data) || data.pipeline_version == 0);
+    }
+
+    function validClientBookmarkUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'title', 'status', 'tags', 'mood_tags', 'notes', 'metadata',
+          'last_shown_at', 'shown_count', 'user_rating', 'user_review',
+          'watched_at', 'is_vaulted', 'priority',
+          'queue_status', 'progress_percent', 'updated_at'
+        ])
+        && (request.resource.data.metadata == resource.data.metadata
+          || request.resource.data.metadata.diff(resource.data.metadata).affectedKeys().hasOnly([
+            'episodes_watched', 'total_episodes', 'trailer_url',
+            'youtube_trailer_url', 'watched_with', 'lifecycle_state',
+            'lifecycle_updated_at'
+          ]));
+    }
+
+    function validBookmarkV2(data, uid) {
+      return data.keys().hasAll([
+          'schemaVersion', 'ownerId', 'source', 'media', 'resolution',
+          'library', 'visibility', 'availability', 'intelligence',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'schemaVersion', 'ownerId', 'source', 'media', 'resolution',
+          'library', 'visibility', 'availability', 'intelligence',
+          'createdAt', 'updatedAt'
+        ])
+        && data.schemaVersion == 2
+        && data.ownerId == uid
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && data.source is map
+        && data.source.keys().hasAll([
+          'originalUrl', 'canonicalUrl', 'platform', 'rawTitle', 'capturedAt', 'captureId'
+        ])
+        && data.source.keys().hasOnly([
+          'originalUrl', 'canonicalUrl', 'platform', 'rawTitle', 'capturedAt', 'captureId'
+        ])
+        && (data.source.originalUrl == null
+          || (data.source.originalUrl is string && data.source.originalUrl.size() <= 2048))
+        && (data.source.canonicalUrl == null
+          || (data.source.canonicalUrl is string && data.source.canonicalUrl.size() <= 2048))
+        && data.source.platform in [
+          'youtube', 'imdb', 'netflix', 'instagram', 'facebook', 'x',
+          'letterboxd', 'tiktok', 'reddit', 'rottentomatoes', 'generic'
+        ]
+        && (data.source.rawTitle == null
+          || (data.source.rawTitle is string && data.source.rawTitle.size() <= 500))
+        && data.source.capturedAt is timestamp
+        && (data.source.captureId == null
+          || (data.source.captureId is string && data.source.captureId.size() <= 128))
+        && data.media is map
+        && data.media.keys().hasAll([
+          'type', 'title', 'posterUrl', 'backdropUrl', 'releaseYear', 'runtimeMinutes'
+        ])
+        && data.media.keys().hasOnly([
+          'type', 'title', 'posterUrl', 'backdropUrl', 'releaseYear', 'runtimeMinutes'
+        ])
+        && data.media.type in ['movie', 'series', 'episode', 'video', 'documentary', 'other']
+        && data.media.title is string && data.media.title.size() > 0 && data.media.title.size() <= 300
+        && (data.media.posterUrl == null
+          || (data.media.posterUrl is string && data.media.posterUrl.size() <= 2048))
+        && (data.media.backdropUrl == null
+          || (data.media.backdropUrl is string && data.media.backdropUrl.size() <= 2048))
+        && (data.media.releaseYear == null
+          || (data.media.releaseYear is int && data.media.releaseYear >= 1880 && data.media.releaseYear <= 2200))
+        && (data.media.runtimeMinutes == null
+          || (data.media.runtimeMinutes is int && data.media.runtimeMinutes > 0 && data.media.runtimeMinutes <= 10000))
+        && data.resolution is map
+        && data.resolution.keys().hasAll(['status', 'provider', 'externalId', 'confidence', 'version'])
+        && data.resolution.keys().hasOnly([
+          'status', 'provider', 'externalId', 'confidence', 'version', 'candidates', 'selectedBy'
+        ])
+        && data.resolution.status in ['pending', 'matched', 'needs_selection', 'unresolved', 'failed']
+        && (data.resolution.provider == null || data.resolution.provider in ['tmdb', 'youtube'])
+        && (data.resolution.externalId == null
+          || (data.resolution.externalId is string && data.resolution.externalId.size() <= 200))
+        && (data.resolution.confidence == null
+          || (data.resolution.confidence is number
+            && data.resolution.confidence >= 0 && data.resolution.confidence <= 1))
+        && data.resolution.version is int && data.resolution.version > 0
+        && (!('candidates' in data.resolution)
+          || (data.resolution.candidates is list && data.resolution.candidates.size() <= 20))
+        && (!('selectedBy' in data.resolution)
+          || data.resolution.selectedBy == null
+          || data.resolution.selectedBy in ['auto', 'user', 'manual'])
+        && data.library is map
+        && data.library.keys().hasAll([
+          'state', 'scheduledAt', 'progressPercent', 'priority', 'queueState',
+          'tags', 'moodTags', 'notes', 'rating', 'review', 'watchedAt',
+          'lastShownAt', 'shownCount'
+        ])
+        && data.library.keys().hasOnly([
+          'state', 'scheduledAt', 'progressPercent', 'priority', 'queueState',
+          'tags', 'moodTags', 'notes', 'rating', 'review', 'watchedAt',
+          'lastShownAt', 'shownCount', 'episodesWatched', 'totalEpisodes',
+          'trailerUrl', 'watchedWith'
+        ])
+        && data.library.state in ['saved', 'watching', 'watched', 'dropped']
+        && (data.library.scheduledAt == null || data.library.scheduledAt is timestamp)
+        && data.library.progressPercent is number
+        && data.library.progressPercent >= 0 && data.library.progressPercent <= 100
+        && data.library.priority is number
+        && data.library.priority >= -100000 && data.library.priority <= 100000
+        && data.library.queueState in ['queued', 'up_next', 'in_progress', 'completed']
+        && data.library.tags is list && data.library.tags.size() <= 30
+        && data.library.moodTags is list && data.library.moodTags.size() <= 25
+        && (data.library.notes == null
+          || (data.library.notes is string && data.library.notes.size() <= 5000))
+        && (data.library.rating == null
+          || (data.library.rating is int && data.library.rating >= 1 && data.library.rating <= 5))
+        && (data.library.review == null
+          || (data.library.review is string && data.library.review.size() <= 5000))
+        && (data.library.watchedAt == null || data.library.watchedAt is timestamp)
+        && (data.library.lastShownAt == null || data.library.lastShownAt is timestamp)
+        && data.library.shownCount is int && data.library.shownCount >= 0
+        && data.visibility is map
+        && data.visibility.keys().hasAll(['isPublic', 'isVaulted', 'shareToken'])
+        && data.visibility.keys().hasOnly(['isPublic', 'isVaulted', 'shareToken'])
+        && data.visibility.isPublic is bool && data.visibility.isVaulted is bool
+        && !(data.visibility.isPublic && data.visibility.isVaulted)
+        && (data.visibility.shareToken == null
+          || (data.visibility.shareToken is string && data.visibility.shareToken.size() <= 200))
+        && (data.availability == null || data.availability is map)
+        && data.intelligence is map
+        && data.intelligence.keys().hasAll([
+          'autoTags', 'embeddingRef', 'fingerprint', 'clusterId', 'importanceScore',
+          'pendingClusterAssignment', 'pipelineVersion', 'lastViewedAt', 'viewCount'
+        ])
+        && data.intelligence.keys().hasOnly([
+          'autoTags', 'embeddingRef', 'fingerprint', 'clusterId', 'importanceScore',
+          'pendingClusterAssignment', 'pipelineVersion', 'lastViewedAt', 'viewCount'
+        ])
+        && data.intelligence.autoTags is list && data.intelligence.autoTags.size() <= 50
+        && data.intelligence.pendingClusterAssignment is bool
+        && data.intelligence.pipelineVersion is int && data.intelligence.pipelineVersion >= 0
+        && (data.intelligence.lastViewedAt == null || data.intelligence.lastViewedAt is timestamp)
+        && data.intelligence.viewCount is int && data.intelligence.viewCount >= 0;
+    }
+
+    function validClientBookmarkV2Create(data, uid) {
+      return validBookmarkV2(data, uid)
+        && data.visibility.isPublic == false
+        && data.visibility.shareToken == null
+        && data.availability == null
+        && data.resolution.status == 'pending'
+        && data.resolution.provider == null
+        && data.resolution.externalId == null
+        && data.resolution.confidence == null
+        && !('candidates' in data.resolution)
+        && !('selectedBy' in data.resolution)
+        && data.intelligence.autoTags.size() == 0
+        && data.intelligence.embeddingRef == null
+        && data.intelligence.fingerprint == null
+        && data.intelligence.clusterId == null
+        && data.intelligence.importanceScore == null
+        && data.intelligence.pendingClusterAssignment == false
+        && data.intelligence.pipelineVersion == 0
+        && data.intelligence.lastViewedAt == null
+        && data.intelligence.viewCount == 0;
+    }
+
+    function validClientBookmarkV2Update() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'media', 'library', 'visibility', 'updatedAt'
+        ])
+        && request.resource.data.media.diff(resource.data.media).affectedKeys().hasOnly(['title'])
+        && request.resource.data.library.diff(resource.data.library).affectedKeys().hasOnly([
+          'state', 'scheduledAt', 'progressPercent', 'priority', 'queueState',
+          'tags', 'moodTags', 'notes', 'rating', 'review', 'watchedAt',
+          'lastShownAt', 'shownCount', 'episodesWatched', 'totalEpisodes',
+          'trailerUrl', 'watchedWith'
+        ])
+        && request.resource.data.visibility.diff(resource.data.visibility).affectedKeys().hasOnly(['isVaulted']);
+    }
+
     match /users/{uid}/bookmarks/{bookmarkId} {
-      allow read: if resource.data.is_public == true;
+      allow read: if owns(uid);
+      allow create: if owns(uid)
+        && (isBookmarkV2(request.resource.data)
+          ? validClientBookmarkV2Create(request.resource.data, uid)
+          : validClientBookmarkCreate(request.resource.data, uid));
+      allow update: if owns(uid)
+        && (isBookmarkV2(resource.data)
+          ? (validBookmarkV2(request.resource.data, uid)
+            && validClientBookmarkV2Update())
+          : (validBookmark(request.resource.data, uid)
+            && validClientBookmarkUpdate()));
+      allow delete: if owns(uid);
     }
 
-    // Feed items — owner can read their own feed; writes restricted to Cloud Functions only
-    match /feed/{uid}/items/{itemId} {
-      allow read: if request.auth != null && request.auth.uid == uid;
+    match /users/{uid}/schedules/{scheduleId} {
+      allow read: if owns(uid);
+      allow create: if owns(uid)
+        && request.resource.data.keys().hasOnly([
+          'user_id', 'bookmark_id', 'scheduled_for', 'reminder_offset_minutes',
+          'recurrence_type', 'state', 'created_at', 'updated_at'
+        ])
+        && request.resource.data.keys().hasAll([
+          'user_id', 'bookmark_id', 'scheduled_for', 'reminder_offset_minutes',
+          'state', 'created_at', 'updated_at'
+        ])
+        && request.resource.data.user_id == uid
+        && request.resource.data.bookmark_id is string
+        && request.resource.data.bookmark_id.size() > 0
+        && request.resource.data.scheduled_for is string
+        && request.resource.data.scheduled_for.size() <= 40
+        && request.resource.data.reminder_offset_minutes is int
+        && request.resource.data.reminder_offset_minutes >= 0
+        && request.resource.data.reminder_offset_minutes <= 43200
+        && (!('recurrence_type' in request.resource.data)
+          || request.resource.data.recurrence_type in ['none', 'daily', 'weekly', 'monthly'])
+        && request.resource.data.state == 'scheduled';
+      allow update: if owns(uid)
+        && request.resource.data.user_id == resource.data.user_id
+        && request.resource.data.created_at == resource.data.created_at
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'scheduled_for', 'reminder_offset_minutes', 'recurrence_type',
+          'state', 'updated_at'
+        ])
+        && request.resource.data.scheduled_for is string
+        && request.resource.data.scheduled_for.size() <= 40
+        && request.resource.data.reminder_offset_minutes is int
+        && request.resource.data.reminder_offset_minutes >= 0
+        && request.resource.data.reminder_offset_minutes <= 43200
+        && (!('recurrence_type' in request.resource.data)
+          || request.resource.data.recurrence_type in ['none', 'daily', 'weekly', 'monthly'])
+        && request.resource.data.state in ['scheduled', 'snoozed', 'cancelled'];
+      allow delete: if owns(uid);
+    }
+
+    match /users/{uid}/notifications/{notificationId} {
+      allow read: if owns(uid);
+      allow update: if owns(uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read_at'])
+        && (request.resource.data.read_at == null
+          || (request.resource.data.read_at is string
+            && request.resource.data.read_at.size() <= 40));
+      allow delete: if owns(uid);
+      allow create: if false;
+    }
+
+    match /users/{uid}/profile/public {
+      allow read: if true;
+      allow create, update: if owns(uid)
+        && request.resource.data.keys().hasOnly([
+          'display_name', 'bio', 'avatar_url', 'bookmarks_count'
+        ])
+        && validOptionalString(request.resource.data, 'display_name', 80)
+        && validOptionalString(request.resource.data, 'bio', 500)
+        && validOptionalString(request.resource.data, 'avatar_url', 2048)
+        && (!('bookmarks_count' in request.resource.data)
+          || (request.resource.data.bookmarks_count is int
+            && request.resource.data.bookmarks_count >= 0));
+      allow delete: if owns(uid);
+    }
+
+    match /users/{uid}/profile/private {
+      allow read: if owns(uid);
+      allow create, update: if owns(uid)
+        && request.resource.data.keys().hasOnly([
+          'fcm_token', 'push_enabled', 'email_reminders_enabled',
+          'favorite_genres', 'preferred_providers', 'onboarding_completed_at',
+          'onboarding_added_ids', 'updated_at'
+        ])
+        && validOptionalString(request.resource.data, 'fcm_token', 4096)
+        && validOptionalString(request.resource.data, 'onboarding_completed_at', 40)
+        && validOptionalString(request.resource.data, 'updated_at', 40)
+        && (!('push_enabled' in request.resource.data)
+          || request.resource.data.push_enabled is bool)
+        && (!('email_reminders_enabled' in request.resource.data)
+          || request.resource.data.email_reminders_enabled is bool)
+        && (!('favorite_genres' in request.resource.data)
+          || (request.resource.data.favorite_genres is list
+            && request.resource.data.favorite_genres.size() <= 50))
+        && (!('preferred_providers' in request.resource.data)
+          || (request.resource.data.preferred_providers is list
+            && request.resource.data.preferred_providers.size() <= 50))
+        && (!('onboarding_added_ids' in request.resource.data)
+          || (request.resource.data.onboarding_added_ids is list
+            && request.resource.data.onboarding_added_ids.size() <= 100));
+      allow delete: if owns(uid);
+    }
+
+    function validFollow(data, followerUid, followingUid) {
+      return followerUid != followingUid
+        && data.keys().hasOnly(['follower_uid', 'following_uid', 'created_at'])
+        && data.keys().hasAll(['follower_uid', 'following_uid', 'created_at'])
+        && data.follower_uid == followerUid
+        && data.following_uid == followingUid
+        && data.created_at is string && data.created_at.size() <= 40;
+    }
+
+    match /users/{uid}/following/{followingUid} {
+      allow read: if owns(uid);
+      allow create: if owns(uid)
+        && validFollow(request.resource.data, uid, followingUid)
+        && existsAfter(/databases/$(database)/documents/users/$(followingUid)/followers/$(uid));
+      allow delete: if owns(uid)
+        && !existsAfter(/databases/$(database)/documents/users/$(followingUid)/followers/$(uid));
+      allow update: if false;
+    }
+
+    match /users/{uid}/followers/{followerUid} {
+      allow read: if owns(uid);
+      allow create: if signedIn() && request.auth.uid == followerUid
+        && validFollow(request.resource.data, followerUid, uid)
+        && existsAfter(/databases/$(database)/documents/users/$(followerUid)/following/$(uid));
+      allow delete: if signedIn() && request.auth.uid == followerUid
+        && !existsAfter(/databases/$(database)/documents/users/$(followerUid)/following/$(uid));
+      allow update: if false;
+    }
+
+    match /users/{uid}/attachments/{attachmentId} {
+      allow read: if owns(uid);
+      allow create: if owns(uid)
+        && request.resource.data.keys().hasOnly([
+          'user_id', 'bookmark_id', 'file_url', 'file_type', 'file_name',
+          'size', 'created_at', 'storage_path'
+        ])
+        && request.resource.data.keys().hasAll([
+          'user_id', 'bookmark_id', 'file_url', 'file_type', 'file_name',
+          'size', 'created_at', 'storage_path'
+        ])
+        && request.resource.data.user_id == uid
+        && request.resource.data.bookmark_id is string
+        && request.resource.data.bookmark_id.size() > 0
+        && request.resource.data.file_url is string
+        && request.resource.data.file_url.size() <= 2048
+        && request.resource.data.file_type in ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf']
+        && request.resource.data.file_name is string
+        && request.resource.data.file_name.size() > 0
+        && request.resource.data.file_name.size() <= 255
+        && request.resource.data.size is int
+        && request.resource.data.size >= 0
+        && request.resource.data.size <= 20 * 1024 * 1024
+        && request.resource.data.storage_path is string
+        && request.resource.data.storage_path.matches('attachments/' + uid + '/[^/]+/[^/]+')
+        && request.resource.data.created_at is string
+        && request.resource.data.created_at.size() <= 40;
+      allow update: if false;
+      allow delete: if owns(uid);
+    }
+
+    match /users/{uid}/watchPlans/{planId} {
+      allow read, delete: if owns(uid);
+      allow create: if owns(uid)
+        && request.resource.data.user_id == uid
+        && request.resource.data.keys().hasOnly([
+          'user_id', 'name', 'description', 'preferred_days', 'time_windows',
+          'max_runtime_minutes', 'mood_tags', 'platforms_allowed',
+          'auto_suggest', 'created_at', 'updated_at'
+        ])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 120
+        && request.resource.data.preferred_days is list
+        && request.resource.data.preferred_days.size() <= 7
+        && request.resource.data.time_windows is list
+        && request.resource.data.time_windows.size() <= 14
+        && request.resource.data.mood_tags is list
+        && request.resource.data.mood_tags.size() <= 25
+        && request.resource.data.platforms_allowed is list
+        && request.resource.data.platforms_allowed.size() <= 25
+        && request.resource.data.auto_suggest is bool;
+      allow update: if owns(uid)
+        && request.resource.data.user_id == resource.data.user_id
+        && request.resource.data.created_at == resource.data.created_at
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'name', 'description', 'preferred_days', 'time_windows',
+          'max_runtime_minutes', 'mood_tags', 'platforms_allowed',
+          'auto_suggest', 'updated_at'
+        ]);
+    }
+
+    match /users/{uid}/watchPlans/{planId}/bookmarks/{entryId} {
+      allow read, delete: if owns(uid);
+      allow create: if owns(uid)
+        && request.resource.data.keys().hasOnly([
+          'bookmark_id', 'user_id', 'position', 'pending'
+        ])
+        && request.resource.data.user_id == uid
+        && request.resource.data.bookmark_id is string
+        && request.resource.data.bookmark_id.size() > 0
+        && request.resource.data.position is int
+        && request.resource.data.position >= 0
+        && (!('pending' in request.resource.data) || request.resource.data.pending is bool);
+      allow update: if owns(uid)
+        && request.resource.data.user_id == resource.data.user_id
+        && request.resource.data.bookmark_id == resource.data.bookmark_id
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['position', 'pending']);
+    }
+
+    // These collections are generated by trusted Functions. Owners may consume
+    // them but browser clients cannot forge pipeline or activity output.
+    match /users/{uid}/{collectionName}/{documentId} {
+      allow read: if owns(uid)
+        && collectionName in ['captures', 'activity', 'resurfaceEvents', 'clusters'];
       allow write: if false;
     }
 
-    // Public profiles — anyone can read
-    match /users/{uid}/profile/public {
-      allow read: if true;
+    match /feed/{uid}/items/{itemId} {
+      allow read: if owns(uid);
+      allow write: if false;
+    }
+
+    match /publicBookmarks/{shareToken} {
+      function activeShare() {
+        let owner = get(/databases/$(database)/documents/publicBookmarkOwners/$(shareToken)).data;
+        let bookmark = get(/databases/$(database)/documents/users/$(owner.uid)/bookmarks/$(owner.bookmarkId)).data;
+        return (bookmark.get('schemaVersion', 1) == 2
+          ? bookmark.visibility.isPublic == true && bookmark.visibility.isVaulted == false && bookmark.visibility.shareToken == shareToken
+          : bookmark.is_public == true && bookmark.get('is_vaulted', false) == false && bookmark.share_token == shareToken);
+      }
+      allow get: if activeShare();
+      allow list: if false;
+      allow write: if false;
+    }
+
+    match /analytics/{date} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /resolutionEvents/{eventId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /captureJobs/{jobId} {
+      allow read, write: if false;
+    }
+
+    match /entityCache/{hash} {
+      allow read, write: if false;
+    }
+
+    match /errorReports/{reportId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

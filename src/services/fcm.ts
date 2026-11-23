@@ -1,7 +1,7 @@
 import { getMessaging, getToken, deleteToken, onMessage, type MessagePayload } from 'firebase/messaging';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
-import { initializeApp, getApps } from 'firebase/app';
+import { getApps } from 'firebase/app';
 
 // Re-use the already-initialized Firebase app
 function getMessagingInstance() {
@@ -47,7 +47,7 @@ export const fcmService = {
       const user = auth.currentUser;
       if (user) {
         await setDoc(
-          doc(db, 'users', user.uid, 'profile', 'public'),
+          doc(db, 'users', user.uid, 'profile', 'private'),
           { fcm_token: token, push_enabled: true },
           { merge: true },
         );
@@ -73,7 +73,7 @@ export const fcmService = {
       console.error('[FCM] Failed to delete FCM token:', err);
     }
     await setDoc(
-      doc(db, 'users', user.uid, 'profile', 'public'),
+      doc(db, 'users', user.uid, 'profile', 'private'),
       { fcm_token: null, push_enabled: false },
       { merge: true },
     );

@@ -12,9 +12,13 @@ import {
   writeBatch,
   documentId,
   deleteField,
+  type DocumentData,
+  type QueryDocumentSnapshot,
+  type DocumentSnapshot,
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { WatchPlan, Bookmark } from '@/types/database';
+import { normalizeBookmark } from '@/services/bookmarkNormalizer';
 
 type WatchPlanBookmarkRow = {
   plan_id: string;
@@ -38,7 +42,9 @@ function planBookmarksCol(uid: string, planId: string) {
   return collection(db, 'users', uid, 'watchPlans', planId, 'bookmarks');
 }
 
-function docToWatchPlan(snap: any): WatchPlan {
+function docToWatchPlan(
+  snap: QueryDocumentSnapshot<DocumentData> | DocumentSnapshot<DocumentData>,
+): WatchPlan {
   return { id: snap.id, ...snap.data() } as WatchPlan;
 }
 
@@ -92,6 +98,7 @@ export const watchPlanService = {
     const ref = doc(db, 'users', uid, 'watchPlans', id);
     await updateDoc(ref, { ...updates, updated_at: new Date().toISOString() });
     const snap = await getDoc(ref);
+    if (!snap.exists()) throw new Error(`WatchPlan ${id} not found after update`);
     return docToWatchPlan(snap);
   },
 
@@ -134,7 +141,7 @@ export const watchPlanService = {
       );
       const bSnap = await getDocs(bq);
       bSnap.docs.forEach((d) => {
-        bookmarkMap.set(d.id, { id: d.id, ...d.data() } as Bookmark);
+        bookmarkMap.set(d.id, normalizeBookmark(d.id, d.data()));
       });
     }
 
@@ -237,7 +244,12 @@ export const watchPlanService = {
             await batch.commit();
           }
         } catch (rollbackErr) {
-          console.error('Rollback of pending inserts also failed:', rollbackErr);
+          const pendingIds = newRefs.map((r) => r.id);
+          console.error(
+            'Rollback of pending inserts also failed. Orphaned pending doc IDs:',
+            pendingIds,
+            rollbackErr,
+          );
         }
         throw err;
       }

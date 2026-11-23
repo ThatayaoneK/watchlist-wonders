@@ -28,7 +28,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -36,10 +35,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { TopNav } from "@/components/layout/TopNav";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { SearchOverlay } from "@/components/search/SearchOverlay";
-import { useSearchShortcut } from "@/hooks/useSearchShortcut";
 import { useToast } from "@/hooks/use-toast";
 import { watchPlanService } from "@/services/watchPlans";
 import { bookmarkService } from "@/services/bookmarks";
@@ -51,7 +47,6 @@ export default function PlanDetail() {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { isSearchOpen, openSearch, closeSearch } = useSearchShortcut();
   const [addOpen, setAddOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [removingBookmarkId, setRemovingBookmarkId] = useState<string | null>(null);
@@ -143,7 +138,6 @@ export default function PlanDetail() {
   if (planLoading) {
     return (
       <div className="min-h-screen bg-background">
-        <TopNav onSearchClick={openSearch} />
         <div className="flex items-center justify-center pt-32">
           <LoadingSpinner size="lg" />
         </div>
@@ -153,15 +147,20 @@ export default function PlanDetail() {
 
   if (!plan) {
     return (
-      <div className="min-h-screen bg-background">
-        <TopNav onSearchClick={openSearch} />
-        <div className="container mx-auto px-4 pt-32 text-center">
-          <p className="text-muted-foreground">Plan not found.</p>
-          <Link to="/plans">
-            <Button variant="outline" className="mt-4">
-              Back to Plans
-            </Button>
-          </Link>
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <div className="max-w-sm w-full text-center space-y-5">
+          <div className="flex justify-center">
+            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+              <Calendar className="w-8 h-8 text-muted-foreground" aria-hidden="true" />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <p className="font-semibold text-foreground">Plan not found</p>
+            <p className="text-sm text-muted-foreground">This plan may have been removed or doesn't exist.</p>
+          </div>
+          <Button asChild className="w-full sm:w-auto">
+            <Link to="/plans">Back to Plans</Link>
+          </Button>
         </div>
       </div>
     );
@@ -169,9 +168,7 @@ export default function PlanDetail() {
 
   return (
     <div className="min-h-screen bg-background">
-      <TopNav onSearchClick={openSearch} />
-
-      <div className="container mx-auto px-4 lg:px-8 pt-20 pb-16 max-w-3xl">
+      <div className="container mx-auto px-4 lg:px-8 pt-32 pb-16 max-w-3xl">
         {/* Back link */}
         <Link
           to="/plans"
@@ -344,11 +341,6 @@ export default function PlanDetail() {
         </DialogContent>
       </Dialog>
 
-      <SearchOverlay
-        isOpen={isSearchOpen}
-        onClose={closeSearch}
-        bookmarks={allBookmarks}
-      />
     </div>
   );
 }

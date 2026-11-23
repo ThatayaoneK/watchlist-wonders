@@ -18,17 +18,7 @@ export function useNotificationListener() {
       (notif) => {
         // Only show toast for notifications created after the listener was mounted
         // and that are unread
-        // Normalize timestamps to numeric values, handling string, number, or Date inputs
-        let createdTs: number;
-        if (typeof notif.created_at === "number") {
-          createdTs = notif.created_at;
-        } else if (typeof notif.created_at === "string") {
-          createdTs = Date.parse(notif.created_at);
-        } else if (notif.created_at instanceof Date) {
-          createdTs = notif.created_at.valueOf();
-        } else {
-          createdTs = NaN;
-        }
+        const createdTs = Date.parse(notif.created_at);
 
         // mountTime is always a string (initialized as new Date().toISOString()), so parse it directly
         const mountTs = Date.parse(mountTime) || NaN;

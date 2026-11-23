@@ -1,0 +1,6 @@
+[
+  { "id": "exact", "queryTitle": "Arrival", "candidateTitle": "Arrival", "expected": "matched" },
+  { "id": "normalized", "queryTitle": "Alien (1979) Official Trailer", "candidateTitle": "Alien", "expected": "matched" },
+  { "id": "ambiguous", "queryTitle": "The Office US", "candidateTitle": "The Office", "queryYear": 2005, "candidateYear": 2005, "expected": "needs_selection" },
+  { "id": "wrong-title", "queryTitle": "Dune", "candidateTitle": "Moonlight", "expected": "unresolved" }
+]

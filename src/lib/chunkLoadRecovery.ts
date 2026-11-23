@@ -1,3 +1,5 @@
+import { storage } from "@/lib/storage";
+
 const CHUNK_RELOAD_GUARD_KEY = "__watchmarks_chunk_reload_once__";
 const CACHE_BUSTER_QUERY_KEY = "__wm_reload";
 
@@ -60,13 +62,13 @@ export async function hardReloadApp(reason?: string) {
 
 async function recoverFromChunkLoadError(message: string) {
   // Prevent infinite refresh loops if recovery doesn't solve the issue.
-  if (sessionStorage.getItem(CHUNK_RELOAD_GUARD_KEY) === "1") {
-    sessionStorage.removeItem(CHUNK_RELOAD_GUARD_KEY);
+  if (storage.get(CHUNK_RELOAD_GUARD_KEY, { fallback: false }, "session")) {
+    storage.remove(CHUNK_RELOAD_GUARD_KEY, "session");
     console.error("[ChunkRecovery] Reload already attempted; leaving page as-is.", message);
     return;
   }
 
-  sessionStorage.setItem(CHUNK_RELOAD_GUARD_KEY, "1");
+  storage.set(CHUNK_RELOAD_GUARD_KEY, true, "session");
   console.warn("[ChunkRecovery] Detected dynamic chunk load failure. Reloading page once.", message);
   await hardReloadApp(message);
 }

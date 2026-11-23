@@ -25,8 +25,8 @@ const STEPS = [
     iconColor: "text-wm-gold",
     iconBg: "bg-wm-gold/10",
     tag: null,
-    title: "Welcome to Watchlist Wonders",
-    body: "Your personal library for everything worth watching — films, series, YouTube videos, docs, and social clips. All in one place.",
+    title: "You're in. Here's how this works.",
+    body: "WatchMarks is a list of movies and shows you want to watch. You save them here, and we help you actually watch them — instead of spending 20 minutes deciding.",
     illustration: <WelcomeIllustration />,
   },
   {
@@ -35,8 +35,8 @@ const STEPS = [
     iconColor: "text-primary",
     iconBg: "bg-primary/10",
     tag: "Step 1",
-    title: "Paste any link, save any video",
-    body: "Copy a URL from YouTube, Instagram, X, or Netflix. Paste it in the bar at the top of your dashboard — we'll automatically pull the title, poster, and runtime.",
+    title: "Save anything with a link",
+    body: "See something on TikTok, YouTube, or anywhere? Copy the link and paste it in the bar at the top. We find the title, poster, and runtime automatically. You don't type anything.",
     illustration: <AddIllustration />,
   },
   {
@@ -45,8 +45,8 @@ const STEPS = [
     iconColor: "text-emerald-400",
     iconBg: "bg-emerald-400/10",
     tag: "Step 2",
-    title: "Your library, organized for you",
-    body: "Saves appear in rows — Continue Watching, Saved for Later, and grouped by mood. Filter by type (movie, series, doc) or status in one tap.",
+    title: "Everything is organized for you",
+    body: "Your saves show up in rows — things you're watching, things you haven't started, and picks grouped by mood. Tap the filters to find what you want in one second.",
     illustration: <LibraryIllustration />,
   },
   {
@@ -55,8 +55,8 @@ const STEPS = [
     iconColor: "text-sky-400",
     iconBg: "bg-sky-400/10",
     tag: "Step 3",
-    title: "Schedule it. Never forget it.",
-    body: "Pick any saved title, set a date and time, and it'll appear in your Up Next rail. Your calendar stays in sync — no more lost recommendations.",
+    title: "Set a reminder so you don't forget",
+    body: "Pick a saved title, choose a date and time, and we'll remind you when it's time to watch. Great for \"I want to watch this on Saturday\" moments.",
     illustration: <ScheduleIllustration />,
   },
   {
@@ -65,15 +65,14 @@ const STEPS = [
     iconColor: "text-violet-400",
     iconBg: "bg-violet-400/10",
     tag: "Step 4",
-    title: "Can't decide? Let us pick.",
-    body: "Hit Surprise Me in the toolbar and we'll randomly surface something from your backlog. One tap to watch, mark done, or reroll.",
+    title: "We'll pick for you if you're stuck",
+    body: "Can't decide? Hit \"Pick for me\" in the toolbar. We'll show you one thing from your list and ask: watch it or try another. No more endless scrolling.",
     illustration: <SurpriseIllustration />,
   },
 ] as const;
 
 export function DashboardTour({ open, onDismiss, onFinish }: DashboardTourProps) {
   const [step, setStep] = useState(0);
-  const [direction, setDirection] = useState<"forward" | "back">("forward");
 
   if (!open) return null;
 
@@ -86,12 +85,10 @@ export function DashboardTour({ open, onDismiss, onFinish }: DashboardTourProps)
       onFinish();
       return;
     }
-    setDirection("forward");
     setStep((s) => s + 1);
   };
 
   const goBack = () => {
-    setDirection("back");
     setStep((s) => s - 1);
   };
 
@@ -151,17 +148,23 @@ export function DashboardTour({ open, onDismiss, onFinish }: DashboardTourProps)
             {/* Dot indicators */}
             <div className="flex items-center gap-1.5">
               {STEPS.map((_, i) => (
+                /* Wrap in a larger tap target for Fitts's Law */
                 <button
                   key={i}
-                  onClick={() => { setDirection(i > step ? "forward" : "back"); setStep(i); }}
-                  className={cn(
-                    "h-1.5 rounded-full transition-all duration-300",
-                    i === step
-                      ? "w-6 bg-primary"
-                      : "w-1.5 bg-border hover:bg-muted-foreground"
-                  )}
+                  onClick={() => setStep(i)}
+                  className="flex items-center justify-center w-6 h-6 -mx-1"
                   aria-label={`Go to step ${i + 1}`}
-                />
+                  aria-current={i === step ? "step" : undefined}
+                >
+                  <span
+                    className={cn(
+                      "block h-1.5 rounded-full transition-all duration-300 pointer-events-none",
+                      i === step
+                        ? "w-6 bg-primary"
+                        : "w-1.5 bg-border hover:bg-muted-foreground"
+                    )}
+                  />
+                </button>
               ))}
             </div>
 
@@ -302,7 +305,7 @@ function LibraryIllustration() {
         { label: "Continue Watching", color: "bg-sky-900/60" },
         { label: "Saved for Later", color: "bg-violet-900/60" },
         { label: "Chill Picks", color: "bg-emerald-900/60" },
-      ].map(({ label, color }, ri) => (
+      ].map(({ color }, ri) => (
         <div key={ri} className="space-y-1.5">
           <div className="h-2 bg-foreground/15 rounded w-28 ml-1" />
           <div className="flex gap-2 overflow-hidden">
@@ -404,7 +407,14 @@ function SurpriseIllustration() {
           { top: "50%", right: "-8px", rotate: "90deg", offset: "-50%" },
           { bottom: "-8px", left: "50%", rotate: "180deg", offset: "-50%" },
           { top: "50%", left: "-8px", rotate: "270deg", offset: "-50%" },
-        ].map((pos, i) => (
+        ].map((pos: {
+          top?: string;
+          bottom?: string;
+          left?: string;
+          right?: string;
+          rotate: string;
+          offset?: string;
+        }, i) => (
           <div
             key={i}
             className={cn(
@@ -413,10 +423,10 @@ function SurpriseIllustration() {
             )}
             style={{
               top: pos.top,
-              bottom: (pos as any).bottom,
+              bottom: pos.bottom,
               left: pos.left,
-              right: (pos as any).right,
-              transform: `translate(${(pos as any).offset ?? "0"}, -50%)`,
+              right: pos.right,
+              transform: `translate(${pos.offset ?? "0"}, -50%)`,
             }}
           />
         ))}
@@ -424,7 +434,7 @@ function SurpriseIllustration() {
 
       {/* Action pills */}
       <div className="flex gap-2">
-        {["Watch Now", "Mark Done", "Reroll"].map((label, i) => (
+        {["Watch Now", "Mark Done", "Try Another"].map((label, i) => (
           <div
             key={label}
             className={cn(

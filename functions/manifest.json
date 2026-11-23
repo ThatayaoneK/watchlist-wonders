@@ -1,0 +1,192 @@
+{
+  "endpoints": {
+    "enrich": {
+      "availableMemoryMb": 256,
+      "timeoutSeconds": 30,
+      "minInstances": null,
+      "maxInstances": null,
+      "ingressSettings": null,
+      "concurrency": null,
+      "serviceAccountEmail": null,
+      "vpc": null,
+      "platform": "gcfv2",
+      "secretEnvironmentVariables": [
+        {
+          "key": "YOUTUBE_API_KEY"
+        },
+        {
+          "key": "TMDB_API_KEY"
+        }
+      ],
+      "labels": {},
+      "callableTrigger": {},
+      "entryPoint": "enrich"
+    },
+    "tmdbProxy": {
+      "availableMemoryMb": 256,
+      "timeoutSeconds": 20,
+      "minInstances": null,
+      "maxInstances": null,
+      "ingressSettings": null,
+      "concurrency": null,
+      "serviceAccountEmail": null,
+      "vpc": null,
+      "platform": "gcfv2",
+      "secretEnvironmentVariables": [
+        {
+          "key": "TMDB_API_KEY"
+        }
+      ],
+      "labels": {},
+      "callableTrigger": {},
+      "entryPoint": "tmdbProxy"
+    },
+    "refreshWatchAvailability": {
+      "availableMemoryMb": 512,
+      "timeoutSeconds": 540,
+      "minInstances": null,
+      "maxInstances": null,
+      "ingressSettings": null,
+      "concurrency": null,
+      "serviceAccountEmail": null,
+      "vpc": null,
+      "platform": "gcfv2",
+      "secretEnvironmentVariables": [
+        {
+          "key": "TMDB_API_KEY"
+        }
+      ],
+      "labels": {},
+      "scheduleTrigger": {
+        "schedule": "every 6 hours",
+        "retryConfig": {},
+        "timeZone": "Africa/Johannesburg"
+      },
+      "entryPoint": "refreshWatchAvailability"
+    },
+    "sendReminders": {
+      "availableMemoryMb": 256,
+      "timeoutSeconds": 300,
+      "minInstances": null,
+      "maxInstances": null,
+      "ingressSettings": null,
+      "concurrency": null,
+      "serviceAccountEmail": null,
+      "vpc": null,
+      "platform": "gcfv2",
+      "secretEnvironmentVariables": [
+        {
+          "key": "RESEND_API_KEY"
+        }
+      ],
+      "labels": {},
+      "scheduleTrigger": {
+        "schedule": "every 5 minutes",
+        "retryConfig": {},
+        "timeZone": "UTC"
+      },
+      "entryPoint": "sendReminders"
+    },
+    "onBookmarkCreated": {
+      "availableMemoryMb": 256,
+      "timeoutSeconds": 30,
+      "minInstances": null,
+      "maxInstances": 10,
+      "ingressSettings": null,
+      "concurrency": null,
+      "serviceAccountEmail": null,
+      "vpc": null,
+      "platform": "gcfv2",
+      "secretEnvironmentVariables": [
+        {
+          "key": "TMDB_API_KEY"
+        }
+      ],
+      "labels": {},
+      "eventTrigger": {
+        "eventType": "google.cloud.firestore.document.v1.created",
+        "eventFilters": {
+          "database": "(default)",
+          "namespace": "(default)"
+        },
+        "eventFilterPathPatterns": {
+          "document": "users/{userId}/bookmarks/{bookmarkId}"
+        },
+        "retry": false
+      },
+      "entryPoint": "onBookmarkCreated"
+    },
+    "retroactiveEnrich": {
+      "availableMemoryMb": 256,
+      "timeoutSeconds": 540,
+      "minInstances": null,
+      "maxInstances": null,
+      "ingressSettings": null,
+      "concurrency": null,
+      "serviceAccountEmail": null,
+      "vpc": null,
+      "platform": "gcfv2",
+      "secretEnvironmentVariables": [
+        {
+          "key": "TMDB_API_KEY"
+        }
+      ],
+      "labels": {},
+      "scheduleTrigger": {
+        "schedule": "every 4 hours",
+        "retryConfig": {},
+        "timeZone": "UTC"
+      },
+      "entryPoint": "retroactiveEnrich"
+    },
+    "manualRetroactiveEnrich": {
+      "availableMemoryMb": 512,
+      "timeoutSeconds": 540,
+      "minInstances": null,
+      "maxInstances": null,
+      "ingressSettings": null,
+      "concurrency": null,
+      "serviceAccountEmail": null,
+      "vpc": null,
+      "platform": "gcfv2",
+      "secretEnvironmentVariables": [
+        {
+          "key": "TMDB_API_KEY"
+        }
+      ],
+      "labels": {},
+      "httpsTrigger": {
+        "invoker": [
+          "private"
+        ]
+      },
+      "entryPoint": "manualRetroactiveEnrich"
+    }
+  },
+  "specVersion": "v1alpha1",
+  "requiredAPIs": [
+    {
+      "api": "cloudscheduler.googleapis.com",
+      "reason": "Needed for scheduled functions."
+    }
+  ],
+  "extensions": {},
+  "params": [
+    {
+      "type": "secret",
+      "name": "YOUTUBE_API_KEY"
+    },
+    {
+      "type": "secret",
+      "name": "TMDB_API_KEY"
+    },
+    {
+      "name": "APP_URL",
+      "type": "string"
+    },
+    {
+      "type": "secret",
+      "name": "RESEND_API_KEY"
+    }
+  ]
+}

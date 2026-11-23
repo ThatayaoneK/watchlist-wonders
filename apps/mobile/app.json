@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "Watchmarks",
+    "slug": "watchmarks",
+    "version": "1.0.0",
+    "scheme": "watchmarks",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#09090b"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.watchmarks.app",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Used for profile pictures"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#09090b"
+      },
+      "package": "com.watchmarks.app",
+      "intentFilters": [
+        {
+          "action": "android.intent.action.SEND",
+          "data": [{ "mimeType": "text/plain" }],
+          "category": ["android.intent.category.DEFAULT"]
+        }
+      ]
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

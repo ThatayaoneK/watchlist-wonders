@@ -5,13 +5,11 @@ import { isToday, isYesterday, isThisWeek } from "date-fns";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { TopNav } from "@/components/layout/TopNav";
-import { SearchOverlay } from "@/components/search/SearchOverlay";
 import { cn, formatRelativeDate } from "@/lib/utils";
 import { notificationService } from "@/services/notifications";
 import { bookmarkService } from "@/services/bookmarks";
 import { useToast } from "@/hooks/use-toast";
-import { useSearchShortcut } from "@/hooks/useSearchShortcut";
+import { getSafeErrorMessage } from "@/lib/errorMessage";
 
 type GroupKey = "Today" | "Yesterday" | "This Week" | "Older";
 
@@ -26,7 +24,6 @@ function getGroupKey(dateString: string): GroupKey {
 const GROUP_ORDER: GroupKey[] = ["Today", "Yesterday", "This Week", "Older"];
 
 const Notifications = () => {
-  const { isSearchOpen, openSearch, closeSearch } = useSearchShortcut();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -42,9 +39,12 @@ const Notifications = () => {
 
   const markAsReadMutation = useMutation({
     mutationFn: (id: string) => notificationService.markAsRead(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
-    onError: (error: any) => {
-      toast({ title: "Error", description: error?.message ?? "Could not mark as read.", variant: "destructive" });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications-count"] });
+    },
+    onError: (error: unknown) => {
+      toast({ title: "Error", description: getSafeErrorMessage(error, "Could not mark as read."), variant: "destructive" });
     },
   });
 
@@ -52,18 +52,22 @@ const Notifications = () => {
     mutationFn: () => notificationService.markAllAsRead(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications-count"] });
       toast({ title: "All caught up!", description: "All notifications marked as read." });
     },
-    onError: (error: any) => {
-      toast({ title: "Error", description: error?.message ?? "Could not mark all as read.", variant: "destructive" });
+    onError: (error: unknown) => {
+      toast({ title: "Error", description: getSafeErrorMessage(error, "Could not mark all as read."), variant: "destructive" });
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => notificationService.deleteNotification(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
-    onError: (error: any) => {
-      toast({ title: "Error", description: error?.message ?? "Could not delete notification.", variant: "destructive" });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications-count"] });
+    },
+    onError: (error: unknown) => {
+      toast({ title: "Error", description: getSafeErrorMessage(error, "Could not delete notification."), variant: "destructive" });
     },
   });
 
@@ -90,8 +94,7 @@ const Notifications = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background">
-        <TopNav onSearchClick={openSearch} />
+      <div className="min-h-screen bg-background pt-[68px]">
         <div className="flex items-center justify-center pt-32">
           <LoadingSpinner size="lg" />
         </div>
@@ -101,8 +104,7 @@ const Notifications = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-background">
-        <TopNav onSearchClick={openSearch} />
+      <div className="min-h-screen bg-background pt-[68px]">
         <div className="flex items-center justify-center pt-32">
           <p className="text-destructive">Error loading notifications</p>
         </div>
@@ -111,10 +113,8 @@ const Notifications = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-24 md:pb-0">
-      <TopNav notificationCount={unreadCount} onSearchClick={openSearch} />
-
-      <div className="container mx-auto px-4 lg:px-8 pt-24 pb-16 max-w-2xl">
+    <div className="min-h-screen bg-background pb-24 md:pb-0 pt-[68px]">
+      <div className="container mx-auto px-4 lg:px-8 pt-6 pb-16 max-w-2xl">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -267,11 +267,6 @@ const Notifications = () => {
         )}
       </div>
 
-      <SearchOverlay
-        isOpen={isSearchOpen}
-        onClose={closeSearch}
-        bookmarks={bookmarks}
-      />
     </div>
   );
 };

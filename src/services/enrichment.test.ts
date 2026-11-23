@@ -19,8 +19,12 @@ beforeEach(() => {
   vi.stubEnv('VITE_TMDB_API_KEY', 'test-tmdb-key');
 });
 
+const originalFetch = global.fetch;
+
 afterEach(() => {
-  vi.clearAllEnv();
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
+  global.fetch = originalFetch;
 });
 
 describe('Enrichment Service', () => {
@@ -101,6 +105,7 @@ describe('Enrichment Service', () => {
       });
 
       const result = await enrichWithTMDB('Inception', 'movie');
+      expect(result).toBeNull();
       expect(callCount).toBeGreaterThanOrEqual(1);
     });
 
@@ -211,15 +216,20 @@ describe('Enrichment Service', () => {
     });
 
     it('should handle fetch timeout for OpenGraph', async () => {
-      global.fetch = vi.fn().mockImplementation(
-        () =>
-          new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('Timeout')), 6000);
-          }),
+      vi.useFakeTimers();
+      global.fetch = vi.fn((_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            'abort',
+            () => reject(new DOMException('Aborted', 'AbortError')),
+            { once: true },
+          );
+        }),
       );
 
-      const result = await enrichWithInstagram('https://instagram.com/p/ABC123/');
-      expect(result).toBeNull();
+      const result = enrichWithInstagram('https://instagram.com/p/ABC123/');
+      await vi.advanceTimersByTimeAsync(5000);
+      await expect(result).resolves.toBeNull();
     });
   });
 
@@ -272,6 +282,7 @@ describe('Enrichment Service', () => {
       });
 
       const result = await enrichWithYouTube('test-id');
+      expect(result?.title).toBe('Test');
       expect(attempts).toBeGreaterThanOrEqual(1);
     });
 
@@ -291,14 +302,21 @@ describe('Enrichment Service', () => {
 
   describe('Timeout Handling', () => {
     it('should handle fetch timeout with AbortController', async () => {
-      // Create a promise that never resolves
-      global.fetch = vi.fn().mockImplementation(() => new Promise(() => {}));
+      vi.useFakeTimers();
+      global.fetch = vi.fn((_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            'abort',
+            () => reject(new DOMException('Aborted', 'AbortError')),
+            { once: true },
+          );
+        }),
+      );
 
-      // The enrichment function should timeout after 10 seconds
-      const promise = enrichWithYouTube('test-id');
-      
-      // For testing, we'd need to advance timers in a real test environment
-      // This test verifies the function runs without throwing
+      const result = enrichWithYouTube('test-id');
+      await vi.runAllTimersAsync();
+      await expect(result).resolves.toBeNull();
+      expect(global.fetch).toHaveBeenCalledTimes(3);
     });
   });
 });

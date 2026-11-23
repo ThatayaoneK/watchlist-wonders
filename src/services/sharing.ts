@@ -1,74 +1,68 @@
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import type { Bookmark } from "@/types/database";
 import {
-  doc,
-  getDoc,
-  getDocs,
-  updateDoc,
-  collectionGroup,
-  query,
-  where,
-  limit,
-} from 'firebase/firestore';
-import { db, auth } from '@/lib/firebase';
-import type { Bookmark } from '@/types/database';
+  listPublicBookmarks,
+  setBookmarkSharing,
+  type PublicBookmarkResult,
+} from "@/services/functions";
 
-function getUid(): string {
-  const user = auth.currentUser;
-  if (!user) throw new Error('Not authenticated');
-  return user.uid;
+function toIsoString(value: unknown): string {
+  if (value && typeof value === "object" && "toDate" in value) {
+    const toDate = (value as { toDate?: unknown }).toDate;
+    if (typeof toDate === "function") return (toDate.call(value) as Date).toISOString();
+  }
+  return typeof value === "string" ? value : new Date(0).toISOString();
+}
+
+function projectionToBookmark(projection: PublicBookmarkResult): Bookmark {
+  return {
+    id: projection.shareToken,
+    user_id: "",
+    title: projection.title,
+    type: projection.mediaType,
+    provider: "generic",
+    source_url: projection.canonicalUrl,
+    canonical_url: projection.canonicalUrl,
+    platform_label: null,
+    status: "backlog",
+    runtime_minutes: projection.runtimeMinutes,
+    release_year: projection.releaseYear,
+    poster_url: projection.posterUrl,
+    backdrop_url: null,
+    tags: [],
+    mood_tags: [],
+    notes: null,
+    metadata: {},
+    last_shown_at: null,
+    shown_count: 0,
+    created_at: toIsoString(projection.createdAt),
+    updated_at: toIsoString(projection.createdAt),
+    is_public: true,
+    is_vaulted: false,
+    share_token: projection.shareToken,
+  };
 }
 
 export const sharingService = {
-  /**
-   * Make a bookmark publicly accessible via a share token.
-   * Returns the share token (UUID).
-   */
   async makeBookmarkPublic(bookmarkId: string): Promise<string> {
-    const uid = getUid();
-    const token = crypto.randomUUID();
-    const ref = doc(db, 'users', uid, 'bookmarks', bookmarkId);
-    await updateDoc(ref, { is_public: true, share_token: token });
-    return token;
+    const result = await setBookmarkSharing(bookmarkId, "publish");
+    if (!result.shareToken) throw new Error("Sharing did not return a token");
+    return result.shareToken;
   },
 
-  /** Remove public access from a bookmark. */
   async makeBookmarkPrivate(bookmarkId: string): Promise<void> {
-    const uid = getUid();
-    const ref = doc(db, 'users', uid, 'bookmarks', bookmarkId);
-    await updateDoc(ref, { is_public: false, share_token: null });
+    await setBookmarkSharing(bookmarkId, "revoke");
   },
 
-  /**
-   * Fetch a single bookmark by share token (public — no auth required).
-   * Requires a Firestore composite index on bookmarks collection group:
-   *   share_token ASC, is_public ASC
-   */
-  async getPublicBookmarkByToken(
-    token: string,
-  ): Promise<(Bookmark & { owner_uid: string }) | null> {
-    const q = query(
-      collectionGroup(db, 'bookmarks'),
-      where('share_token', '==', token),
-      where('is_public', '==', true),
-      limit(1),
-    );
-    const snap = await getDocs(q);
-    if (snap.empty) return null;
-    const d = snap.docs[0];
-    // Path is users/{uid}/bookmarks/{id}
-    const owner_uid = d.ref.parent.parent?.id;
-    if (!owner_uid) throw new Error('malformed bookmark path: missing owner uid');
-    return { id: d.id, owner_uid, ...d.data() } as Bookmark & { owner_uid: string };
+  async getPublicBookmarkByToken(token: string): Promise<(Bookmark & { owner_uid: string }) | null> {
+    const snapshot = await getDoc(doc(db, "publicBookmarks", token));
+    if (!snapshot.exists()) return null;
+    const data = snapshot.data() as Omit<PublicBookmarkResult, "shareToken">;
+    return { ...projectionToBookmark({ shareToken: token, ...data }), owner_uid: "" };
   },
 
-  /** Fetch all public bookmarks by a specific user. */
-  async getPublicBookmarksByUser(uid: string, lim = 50): Promise<Bookmark[]> {
-    const q = query(
-      collectionGroup(db, 'bookmarks'),
-      where('user_id', '==', uid),
-      where('is_public', '==', true),
-      limit(lim),
-    );
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Bookmark);
+  async getPublicBookmarksByUser(uid: string, limit = 50): Promise<Bookmark[]> {
+    return (await listPublicBookmarks(uid, limit)).map(projectionToBookmark);
   },
 };

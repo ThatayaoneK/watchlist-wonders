@@ -15,6 +15,7 @@ import {
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { Notification, Bookmark } from '@/types/database';
+import { normalizeBookmark } from '@/services/bookmarkNormalizer';
 
 type NotificationWithBookmark = Notification & { bookmarks?: Bookmark };
 
@@ -33,21 +34,26 @@ async function batchAttachBookmarks(uid: string, notifications: Notification[]):
   if (ids.length === 0) return notifications;
   const CHUNK = 30;
   const bookmarkMap = new Map<string, Bookmark>();
+  let failedChunks = 0;
   for (let i = 0; i < ids.length; i += CHUNK) {
     const chunk = ids.slice(i, i + CHUNK);
     try {
       const bq = query(collection(db, 'users', uid, 'bookmarks'), where(documentId(), 'in', chunk));
       const bSnap = await getDocs(bq);
       bSnap.docs.forEach((d) => {
-        bookmarkMap.set(d.id, { id: d.id, ...d.data() } as Bookmark);
+        bookmarkMap.set(d.id, normalizeBookmark(d.id, d.data()));
       });
     } catch (error) {
+      failedChunks++;
       console.error(
         `Failed to fetch bookmark chunk [${chunk.join(', ')}]:`,
         error instanceof Error ? error.message : error
       );
-      // Continue processing remaining chunks; missing bookmarks will be absent from bookmarkMap
     }
+  }
+  if (failedChunks > 0) {
+    const totalChunks = Math.ceil(ids.length / CHUNK);
+    throw new Error(`Failed to load ${failedChunks} of ${totalChunks} notification chunk(s). Some notifications may be missing.`);
   }
   return notifications.map((n) =>
     n.bookmark_id && bookmarkMap.has(n.bookmark_id)
@@ -56,8 +62,10 @@ async function batchAttachBookmarks(uid: string, notifications: Notification[]):
   );
 }
 
-function docToNotification(snap: any): Notification {
-  return { id: snap.id, ...snap.data() } as Notification;
+function docToNotification(snap: { id: string; data(): Record<string, unknown> | undefined }): Notification {
+  const data = snap.data();
+  if (!data) throw new Error(`Notification ${snap.id} not found`);
+  return { id: snap.id, ...data } as Notification;
 }
 
 export const notificationService = {

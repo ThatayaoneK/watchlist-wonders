@@ -1,8 +1,9 @@
 import { initializeApp, type FirebaseOptions } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
+import { getAuth, connectAuthEmulator } from 'firebase/auth';
+import { getFirestore, enableIndexedDbPersistence, connectFirestoreEmulator } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
-import { getFunctions } from 'firebase/functions';
+import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
+import { getAnalytics, isSupported as isAnalyticsSupported, type Analytics } from 'firebase/analytics';
 
 const REQUIRED_FIREBASE_ENV_KEYS = [
   'VITE_FIREBASE_API_KEY',
@@ -42,6 +43,9 @@ const env = {
   VITE_FIREBASE_MESSAGING_SENDER_ID: normalizeEnvValue(import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID),
   VITE_FIREBASE_APP_ID: normalizeEnvValue(import.meta.env.VITE_FIREBASE_APP_ID),
   VITE_FIREBASE_MEASUREMENT_ID: normalizeEnvValue(import.meta.env.VITE_FIREBASE_MEASUREMENT_ID),
+  VITE_FIREBASE_AUTH_EMULATOR_HOST: normalizeEnvValue(import.meta.env.VITE_FIREBASE_AUTH_EMULATOR_HOST),
+  VITE_FIREBASE_FIRESTORE_EMULATOR_HOST: normalizeEnvValue(import.meta.env.VITE_FIREBASE_FIRESTORE_EMULATOR_HOST),
+  VITE_FIREBASE_FUNCTIONS_EMULATOR_HOST: normalizeEnvValue(import.meta.env.VITE_FIREBASE_FUNCTIONS_EMULATOR_HOST),
 };
 
 const missingRequiredFirebaseEnv = REQUIRED_FIREBASE_ENV_KEYS.filter((key) => !env[key]);
@@ -82,6 +86,38 @@ export const auth = (() => {
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 export const fbFunctions = getFunctions(app);
+
+if (import.meta.env.DEV) {
+  if (env.VITE_FIREBASE_AUTH_EMULATOR_HOST) {
+    const [authHost, authPort] = env.VITE_FIREBASE_AUTH_EMULATOR_HOST.split(":");
+    connectAuthEmulator(auth, `http://${authHost}:${authPort}`, { disableWarnings: true });
+  }
+
+  if (env.VITE_FIREBASE_FIRESTORE_EMULATOR_HOST) {
+    const [firestoreHost, firestorePort] = env.VITE_FIREBASE_FIRESTORE_EMULATOR_HOST.split(":");
+    connectFirestoreEmulator(db, firestoreHost, Number(firestorePort));
+  }
+
+  if (env.VITE_FIREBASE_FUNCTIONS_EMULATOR_HOST) {
+    const [functionsHost, functionsPort] = env.VITE_FIREBASE_FUNCTIONS_EMULATOR_HOST.split(":");
+    connectFunctionsEmulator(fbFunctions, functionsHost, Number(functionsPort));
+  }
+}
+
+// Initialise Firebase Analytics in production when a measurement ID is set.
+// Skipped in dev to avoid sending local-noise events to the production stream.
+export let analytics: Analytics | null = null;
+if (!import.meta.env.DEV && env.VITE_FIREBASE_MEASUREMENT_ID) {
+  void isAnalyticsSupported().then((supported) => {
+    if (supported) {
+      try {
+        analytics = getAnalytics(app);
+      } catch (err) {
+        console.warn('[Firebase] Analytics init failed:', err);
+      }
+    }
+  });
+}
 
 // Enable offline persistence (IndexedDB) - non-fatal if already enabled or in a second tab
 enableIndexedDbPersistence(db).catch((err) => {

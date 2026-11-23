@@ -1,28 +1,89 @@
-name: Feature branch CI
+name: CI
 
 on:
   push:
-    branches:
-      - main
-      - feature/**
+    branches: ["**"]
   pull_request:
-    branches:
-      - main
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  VITE_FIREBASE_API_KEY: fake-api-key-for-ci
+  VITE_FIREBASE_AUTH_DOMAIN: demo-watchmarks.firebaseapp.com
+  VITE_FIREBASE_PROJECT_ID: demo-watchmarks
+  VITE_FIREBASE_STORAGE_BUCKET: demo-watchmarks.appspot.com
+  VITE_FIREBASE_MESSAGING_SENDER_ID: "1234567890"
+  VITE_FIREBASE_APP_ID: "1:1234567890:web:ci"
 
 jobs:
-  build:
+  quality-web:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Build production bundle
-        run: npm run build
-      - name: Test share-capture utilities
-        run: npx --yes vitest@2.1.9 run src/lib/utils.integration.test.ts
+      # `npm ci` at the repo root resolves all workspaces (apps/*, packages/*,
+      # functions) and links @watchmarks/shared into node_modules.
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build:ci
+
+  quality-functions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck:functions
+      - run: npm run stage:functions
+      - run: npm install --prefix .firebase/functions-stage --omit=dev --ignore-scripts
+      - run: node -e "require('./.firebase/functions-stage/lib/index.js')"
+      - run: npm test -- --reporter=dot functions/src
+
+  security-rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - run: npm run test:rules
+
+  e2e-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: npm run test:e2e
+
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+
+

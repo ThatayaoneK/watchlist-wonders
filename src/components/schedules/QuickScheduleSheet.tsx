@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, addDays, nextSaturday, nextMonday } from "date-fns";
-import { Clock, Loader2, Calendar } from "lucide-react";
+import { Clock, Loader2, Calendar, CalendarPlus } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -13,10 +13,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { getSafeErrorMessage } from "@/lib/errorMessage";
 import { cn } from "@/lib/utils";
 import { scheduleService } from "@/services/schedules";
+import { bookmarkService } from "@/services/bookmarks";
+import { reportError } from "@/services/errorMonitoring";
 import { toast } from "sonner";
-import type { Bookmark } from "@/types/database";
+import { downloadICS } from "@/utils/createICS";
+import type { Bookmark, Schedule } from "@/types/database";
 
 // Quick-pick time slots
 function getTonightDate(): Date | null {
@@ -83,30 +87,53 @@ export function QuickScheduleSheet({
   const [customTime, setCustomTime] = useState("20:00");
   const [reminderOffset, setReminderOffset] = useState("60");
   const [showCustom, setShowCustom] = useState(false);
+  const [createdSchedule, setCreatedSchedule] = useState<Schedule | null>(null);
 
   const mutation = useMutation({
     mutationFn: async (scheduledFor: Date) => {
       if (!bookmark) throw new Error("No bookmark selected");
-      return scheduleService.createSchedule({
+      const created = await scheduleService.createSchedule({
         bookmark_id: bookmark.id,
         scheduled_for: scheduledFor.toISOString(),
         reminder_offset_minutes: parseInt(reminderOffset, 10),
         recurrence_type: "none",
       });
+      if (bookmark.status !== "done") {
+        const previousStatus = bookmark.status;
+        queryClient.setQueryData<Bookmark[]>(["bookmarks"], (current = []) =>
+          current.map((item) =>
+            item.id === bookmark.id ? { ...item, status: "scheduled" } : item,
+          ),
+        );
+
+        bookmarkService.updateStatus(bookmark.id, "scheduled").catch((error) => {
+          reportError(error, {
+            scope: "QuickScheduleSheet",
+            action: "bookmarkService.updateStatus",
+            bookmarkId: bookmark.id,
+          });
+          queryClient.setQueryData<Bookmark[]>(["bookmarks"], (current = []) =>
+            current.map((item) =>
+              item.id === bookmark.id ? { ...item, status: previousStatus } : item,
+            ),
+          );
+          toast.error("Scheduled, but couldn't update bookmark status. Pull to refresh.");
+        });
+      }
+      return created;
     },
-    onSuccess: () => {
+    onSuccess: (created) => {
+      setCreatedSchedule(created);
       queryClient.invalidateQueries({ queryKey: ["schedules"] });
-      queryClient.invalidateQueries({ queryKey: ["schedules", "upcoming"] });
       queryClient.invalidateQueries({ queryKey: ["bookmarks"] });
-      onOpenChange(false);
       onScheduled?.();
       toast.success("Scheduled! You'll get a reminder before it starts.");
-      // Reset state
+      // Reset quick-pick state but keep sheet open to show Add to Calendar
       setSelectedQuick(null);
       setShowCustom(false);
     },
-    onError: (err: any) => {
-      toast.error(err.message || "Could not create schedule.");
+    onError: (err: unknown) => {
+      toast.error(getSafeErrorMessage(err, "Could not create schedule."));
     },
   });
 
@@ -134,8 +161,17 @@ export function QuickScheduleSheet({
 
   const todayStr = getLocalDateInputValue();
 
+  const handleOpenChange = (isOpen: boolean) => {
+    if (!isOpen) {
+      setCreatedSchedule(null);
+      setSelectedQuick(null);
+      setShowCustom(false);
+    }
+    onOpenChange(isOpen);
+  };
+
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent side="bottom" className="rounded-t-2xl max-h-[90vh] pb-safe">
         <SheetHeader className="mb-6">
           <SheetTitle className="text-left">
@@ -150,31 +186,37 @@ export function QuickScheduleSheet({
         <div className="grid grid-cols-2 gap-3 mb-6">
           {QUICK_OPTIONS.map(({ label, getDate }) => {
             const date = getDate();
-            if (!date) return null;
+            const isUnavailable = !date;
             const isPending = mutation.isPending && selectedQuick === label;
             return (
               <button
                 key={label}
                 type="button"
-                disabled={mutation.isPending}
-                onClick={() => handleQuickPick(label, getDate)}
+                disabled={mutation.isPending || isUnavailable}
+                onClick={() => date && handleQuickPick(label, getDate)}
+                title={isUnavailable && label === "Tonight" ? "Tonight is only available before 6 PM" : undefined}
                 className={cn(
                   "flex flex-col items-start gap-1 p-4 rounded-xl border text-left transition-all",
-                  selectedQuick === label && mutation.isPending
+                  isUnavailable
+                    ? "border-border bg-muted/40 opacity-50 cursor-not-allowed"
+                    : selectedQuick === label && mutation.isPending
                     ? "border-primary bg-primary/10"
                     : "border-border bg-wm-surface hover:border-primary/50 hover:bg-wm-surface-hover"
                 )}
+                aria-disabled={isUnavailable}
               >
                 <span className="text-sm font-semibold text-foreground">{label}</span>
                 <span className="text-xs text-muted-foreground">
-                  {isPending ? (
+                  {isUnavailable && label === "Tonight" ? (
+                    "Available before 6 PM"
+                  ) : isPending ? (
                     <span className="flex items-center gap-1">
                       <Loader2 className="w-3 h-3 animate-spin" />
                       Scheduling…
                     </span>
-                  ) : (
+                  ) : date ? (
                     format(date, "EEE, MMM d 'at' h:mm a")
-                  )}
+                  ) : null}
                 </span>
               </button>
             );
@@ -243,6 +285,30 @@ export function QuickScheduleSheet({
               {mutation.isPending && !selectedQuick ? (
                 <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Scheduling…</>
               ) : "Schedule"}
+            </Button>
+          </div>
+        )}
+
+        {/* Add to Calendar — shown after scheduling */}
+        {createdSchedule && bookmark && (
+          <div className="pt-4 border-t border-border mt-4">
+            <Button
+              variant="outline"
+              className="w-full gap-2"
+              onClick={() => downloadICS(bookmark, createdSchedule)}
+            >
+              <CalendarPlus className="w-4 h-4" />
+              Add to Calendar (.ics)
+            </Button>
+            <p className="text-xs text-muted-foreground text-center mt-2">
+              Works with Apple Calendar, Google Calendar &amp; Outlook
+            </p>
+            <Button
+              variant="ghost"
+              className="w-full mt-1 text-muted-foreground text-xs"
+              onClick={() => handleOpenChange(false)}
+            >
+              Done
             </Button>
           </div>
         )}

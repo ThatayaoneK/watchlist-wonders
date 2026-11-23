@@ -10,6 +10,7 @@ import {
   User,
 } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
+import { getCanonicalAppUrl } from "@/lib/appConfig";
 
 export const authService = {
   /**
@@ -56,12 +57,7 @@ export const authService = {
    * Reset password via email
    */
   async resetPassword(email: string) {
-    const origin =
-      import.meta.env.VITE_APP_URL ||
-      (typeof window !== 'undefined' ? window.location.origin : '');
-    if (!origin) {
-      throw new Error('App URL is not configured. Cannot send password reset email.');
-    }
+    const origin = getCanonicalAppUrl();
     await sendPasswordResetEmail(auth, email, {
       url: `${origin}/auth`,
     });

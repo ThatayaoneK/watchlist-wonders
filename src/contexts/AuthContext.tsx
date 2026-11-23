@@ -9,10 +9,12 @@ import {
   signInWithPopup,
 } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
+import { getFriendlyFirebaseError } from '@/lib/firebaseErrorMessages';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
+  authError: string | null;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -24,11 +26,13 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     // Avoid permanent loading state if auth bootstrap errors or hangs.
     const authInitTimeout = window.setTimeout(() => {
       console.error('[Auth] Timed out waiting for Firebase auth initialization.');
+      setAuthError('Authentication timed out. Please check your connection and reload.');
       setLoading(false);
     }, 8000);
 
@@ -37,11 +41,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       (firebaseUser) => {
         window.clearTimeout(authInitTimeout);
         setUser(firebaseUser);
+        setAuthError(null);
         setLoading(false);
       },
       (error) => {
         window.clearTimeout(authInitTimeout);
         console.error('[Auth] Firebase auth initialization failed:', error);
+        setAuthError(
+          getFriendlyFirebaseError(error, 'Authentication failed. Please reload and try again.'),
+        );
         setUser(null);
         setLoading(false);
       },
@@ -71,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut, signInWithGoogle }}>
+    <AuthContext.Provider value={{ user, loading, authError, signIn, signUp, signOut, signInWithGoogle }}>
       {children}
     </AuthContext.Provider>
   );

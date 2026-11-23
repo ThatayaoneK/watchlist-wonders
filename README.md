@@ -1,218 +1,132 @@
-# WatchMarks - Your Personal Watchlist Manager
+# WatchMarks
 
-A Netflix-style watchlist manager built with React, TypeScript, Firebase, and shadcn/ui. Organize movies, series, videos, and content with powerful scheduling, social features, and metadata enrichment.
+WatchMarks is a React + Firebase watchlist application for saving, organizing, and enriching streaming links.
 
-## 🚀 Features Implemented
+## Stack
 
-### ✅ Phase 1: Core Infrastructure
-- **Complete Firebase Database Schema** with Firestore collections
-- **Security Rules** for all Firestore collections
-- **Firebase Storage** buckets configuration (attachments, avatars, posters)
-- **Type-safe database layer** with TypeScript types
-- **Service layer architecture** for all major features
-- **React Query** integration for data fetching and caching
+- Frontend: React 18, TypeScript, Vite, Tailwind, shadcn/ui
+- Backend: Firebase Auth, Firestore, Storage, Cloud Functions (Gen 2)
+- Data fetching: TanStack Query
+- Routing: React Router 7
 
-### ✅ Phase 2: Authentication & User Management
-- **Firebase Auth** integration (email/password)
-- **Protected routes** with automatic redirects
-- **Session persistence** across page reloads
-- **Auth context** providing user state throughout the app
-- **Sign in, sign up, and sign out** flows
-- **User profiles** with automatic creation on signup
+## Requirements
 
-### ✅ Phase 3: Bookmark Management (Partial)
-- **Dashboard** fetching real data from Firestore
-- **Create bookmarks** with full metadata
-- **Bookmark grouping** by status (Backlog, Watching, Done)
-- **Mood-based organization** with mood tags
-- **Loading and error states** for better UX
-- **React Query mutations** for optimistic updates
+- Node.js 22.x
+- npm 10 or 11
+- Firebase CLI (`npm install -g firebase-tools`)
+- A Firebase project
 
-## 🏗️ Architecture
+## Quick Start
 
-### Tech Stack
-- **Frontend**: React 18 + TypeScript + Vite
-- **UI Components**: shadcn/ui + Radix UI + Tailwind CSS
-- **Backend**: Firebase (Firestore + Auth + Storage + Hosting + Cloud Functions)
-- **State Management**: React Query (TanStack Query)
-- **Routing**: React Router v6
+1. Install all root and workspace dependencies from the lockfile:
 
-### Project Structure
-```
-src/
-├── components/          # React components
-│   ├── ui/             # shadcn/ui components
-│   ├── bookmarks/      # Bookmark-specific components
-│   ├── layout/         # Layout components (TopNav, HeroBanner)
-│   └── search/         # Search components
-├── contexts/           # React contexts
-│   └── AuthContext.tsx # Authentication state management
-├── hooks/              # Custom React hooks
-├── lib/                # Utility functions
-│   ├── firebase.ts    # Firebase client setup
-│   └── utils.ts       # Helper functions
-├── pages/              # Page components
-│   ├── Auth.tsx       # Authentication page
-│   ├── Dashboard.tsx  # Main dashboard
-│   ├── NewBookmark.tsx # Create bookmark page
-│   └── ...
-├── services/           # API service layer
-│   ├── auth.ts        # Authentication services
-│   ├── bookmarks.ts   # Bookmark CRUD operations
-│   ├── schedules.ts   # Schedule management
-│   ├── notifications.ts # Notification services
-│   └── watchPlans.ts  # Watch plan services
-└── types/              # TypeScript type definitions
-    └── database.ts    # Application types
-    
-functions/             # Firebase Cloud Functions
-├── src/
-│   ├── enrich.ts      # Metadata enrichment function
-│   └── index.ts       # Function exports
-├── package.json
-└── README.md          # Functions documentation
-```
-
-## 🔧 Setup Instructions
-
-### Prerequisites
-- Node.js 18+ and npm
-- A Firebase account (free tier works)
-- Google Cloud account (for API keys)
-
-### 1. Clone and Install
 ```bash
-git clone <repository-url>
-cd watchlist-wonders
-npm install
+npm ci
 ```
 
-### 2. Set Up Firebase
-1. Create a Firebase project at [console.firebase.google.com](https://console.firebase.google.com)
-2. Enable Firestore Database
-3. Enable Authentication (Email/Password)
-4. Set up Storage buckets
-5. Deploy Cloud Functions for metadata enrichment
+2. Create local environment file:
 
-For detailed instructions, see `functions/README.md`
-
-### 3. Environment Variables
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` and add your Firebase credentials:
+3. Fill Firebase web app values in `.env`:
+
 ```env
-VITE_FIREBASE_API_KEY=your-api-key
-VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
-VITE_FIREBASE_PROJECT_ID=your-project-id
-VITE_FIREBASE_STORAGE_BUCKET=your-project.firebasestorage.app
-VITE_FIREBASE_MESSAGING_SENDER_ID=your-sender-id
-VITE_FIREBASE_APP_ID=your-app-id
-VITE_FIREBASE_MEASUREMENT_ID=your-measurement-id
-VITE_ENRICH_URL=https://us-central1-your-project-id.cloudfunctions.net/enrich
-VITE_YOUTUBE_API_KEY=optional-for-local-fallback
-VITE_TMDB_API_KEY=optional-for-local-fallback
+VITE_FIREBASE_API_KEY=
+VITE_FIREBASE_AUTH_DOMAIN=
+VITE_FIREBASE_PROJECT_ID=
+VITE_FIREBASE_STORAGE_BUCKET=
+VITE_FIREBASE_MESSAGING_SENDER_ID=
+VITE_FIREBASE_APP_ID=
+VITE_FIREBASE_MEASUREMENT_ID=
+VITE_FIREBASE_VAPID_KEY=
+VITE_APP_URL=
 ```
 
-### 4. Run Development Server
+4. Start the app:
+
 ```bash
 npm run dev
 ```
 
-Visit `http://localhost:5173` and create an account!
+## Firebase Setup
 
-## 📊 Database Schema
+1. Login and select project:
 
-The Firestore database includes the following main collections:
-- **bookmarks** - Core content storage
-- **attachments** - File attachments for bookmarks
-- **schedules** - One-time and recurring schedules
-- **schedule_occurrences** - Generated schedule instances
-- **notifications** - User notifications
-- **watch_plans** - Watch planning and organization
-- **watch_plan_bookmarks** - Junction collection for plans
-- **public_profiles** - User profile information
-- **user_follows** - Social graph
-- **sharing_links** - Public sharing functionality
-- **enrich_cache** - URL metadata cache
+```bash
+firebase login
+firebase use --add
+```
 
-See service Layer in `src/services/` for collection structure details.
+2. Enable Firebase services in console:
 
-## 🎯 Roadmap
+- Authentication (Email/Password)
+- Firestore
+- Storage
 
-### Phase 3: Complete Bookmark Management
-- [ ] Bookmark status transitions (Backlog → Watching → Done)
-- [ ] Search and filtering by multiple criteria
-- [ ] Attachment upload functionality
-- [ ] Bulk actions
+3. Set function secrets (used by `functions/src/enrich.ts`):
 
-### Phase 4: Scheduling System
-- [ ] One-time scheduling
-- [ ] Recurring schedules (daily, weekly, monthly)
-- [ ] Calendar views (month, week, day)
-- [ ] Reminder notifications
+```bash
+firebase functions:secrets:set YOUTUBE_API_KEY
+firebase functions:secrets:set TMDB_API_KEY
+```
 
-### Phase 5: Notifications
-- [ ] Real-time notification system
-- [ ] Notification preferences
-- [ ] Push notifications (later)
+4. Set canonical app URL for function emails/links:
 
-### Phase 6: Watch Plans
-- [ ] Create and manage watch plans
-- [ ] Plan suggestions based on mood/time
-- [ ] Auto-scheduling from plans
+```bash
+firebase functions:params:set APP_URL="https://your-app.web.app"
+```
 
-### Phase 7: Metadata Enrichment
-- [ ] YouTube Data API integration
-- [ ] TMDB API integration
-- [ ] Open Graph fallback
-- [ ] Enrichment caching
+5. Deploy infrastructure and app:
 
-### Phase 8: Social Features
-- [ ] Public profiles
-- [ ] Follow/unfollow users
-- [ ] Share bookmarks and plans
-- [ ] Activity feed
+```bash
+firebase deploy --only firestore:rules,firestore:indexes,storage
+firebase deploy --only functions
+firebase deploy --only hosting
+```
 
-### Phase 9: Polish & Performance
-- [ ] Error boundaries
-- [ ] Optimistic updates
-- [ ] Loading skeletons
-- [ ] Accessibility improvements
-- [ ] Code splitting and lazy loading
+## Local emulator usage
 
-## 🔐 Security
+When developing locally, you can route Firebase Auth, Firestore, and callable Functions to the emulator by setting these values in `.env`:
 
-- **Firestore Security Rules** enforced on all collections
-- **User isolation** - users can only access their own data
-- **Secure authentication** via Firebase Auth
-- **Storage policies** - files scoped to user folders
-- **Type-safe queries** with TypeScript
-- **Cloud Functions** with proper CORS and validation
+```env
+VITE_FIREBASE_AUTH_EMULATOR_HOST=localhost:9099
+VITE_FIREBASE_FIRESTORE_EMULATOR_HOST=localhost:8080
+VITE_FIREBASE_FUNCTIONS_EMULATOR_HOST=localhost:5001
+```
 
-## 📝 Available Scripts
+Then run:
 
-- `npm run dev` - Start development server
-- `npm run build` - Build for production
+```bash
+firebase emulators:start --only auth,firestore,functions
+```
+
+The frontend will automatically connect to the emulator hosts when running in development.
+
+## Enrichment Flow
+
+The canonical ingestion contract, asynchronous worker, SSRF boundary, fixture policy, and rollout procedure are documented in [Capture pipeline v2](docs/capture-pipeline.md).
+
+- Frontend calls Firebase callable function `enrich` via `httpsCallable`.
+- There is no `VITE_ENRICH_URL` runtime setting in the current app path.
+- Callable requires authenticated users.
+
+See function details in `functions/README.md`.
+
+## Scripts
+
+- `npm run dev` - Start Vite dev server
+- `npm run build` - Build frontend
+- `npm run typecheck` - Type-check the frontend
+- `npm run typecheck:functions` - Type-check Cloud Functions
+- `npm run verify` - Run the authoritative local web verification suite
 - `npm run preview` - Preview production build
 - `npm run lint` - Run ESLint
+- `npm test` - Run Vitest once
+- `npm run test:watch` - Run Vitest in watch mode
 
-## 🤝 Contributing
+## Notes
 
-This is a demonstration project showcasing Firebase integration. Feel free to fork and customize!
-
-## 📄 License
-
-MIT License - feel free to use this project as a starting point for your own applications.
-
-## 🙏 Acknowledgments
-
-- [Supabase](https://supabase.com/) - Backend as a Service
-- [shadcn/ui](https://ui.shadcn.com/) - UI Component Library
-- [React Query](https://tanstack.com/query) - Data Fetching & Caching
-- [Tailwind CSS](https://tailwindcss.com/) - Styling
-
----
-
-**Note**: This project requires a configured Supabase backend to function. See `supabase/README.md` for setup instructions.
+- Root tests currently cover URL/provider detection and enrichment helpers.
+- The frontend is now wired to route callable requests to the emulator when the appropriate `VITE_FIREBASE_*_EMULATOR_HOST` values are set in `.env` and you run the Firebase emulators.

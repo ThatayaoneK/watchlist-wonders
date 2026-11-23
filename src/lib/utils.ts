@@ -46,24 +46,20 @@ export function getTimeOfDay(): "morning" | "afternoon" | "evening" | "night" {
   return "night";
 }
 
-function hostMatches(hostname: string, domain: string): boolean {
-  return hostname === domain || hostname.endsWith(`.${domain}`);
-}
-
 export function detectProvider(url: string): "youtube" | "imdb" | "netflix" | "instagram" | "facebook" | "x" | "letterboxd" | "tiktok" | "reddit" | "rottentomatoes" | "generic" {
   try {
-    const hostname = new URL(url).hostname.toLowerCase().replace(/\.$/, "");
+    const hostname = new URL(url).hostname.toLowerCase();
 
-    if (["youtube.com", "youtu.be"].some((domain) => hostMatches(hostname, domain))) return "youtube";
-    if (hostMatches(hostname, "imdb.com")) return "imdb";
-    if (hostMatches(hostname, "netflix.com")) return "netflix";
-    if (["instagram.com", "instagr.am"].some((domain) => hostMatches(hostname, domain))) return "instagram";
-    if (["facebook.com", "fb.com", "fb.watch"].some((domain) => hostMatches(hostname, domain))) return "facebook";
-    if (["twitter.com", "x.com"].some((domain) => hostMatches(hostname, domain))) return "x";
-    if (hostMatches(hostname, "letterboxd.com")) return "letterboxd";
-    if (hostMatches(hostname, "tiktok.com")) return "tiktok";
-    if (hostMatches(hostname, "reddit.com")) return "reddit";
-    if (hostMatches(hostname, "rottentomatoes.com")) return "rottentomatoes";
+    if (hostname.includes("youtube.com") || hostname.includes("youtu.be")) return "youtube";
+    if (hostname.includes("imdb.com")) return "imdb";
+    if (hostname.includes("netflix.com")) return "netflix";
+    if (hostname.includes("instagram.com")) return "instagram";
+    if (hostname.includes("facebook.com") || hostname.includes("fb.com")) return "facebook";
+    if (hostname.includes("twitter.com") || hostname.includes("x.com")) return "x";
+    if (hostname.includes("letterboxd.com")) return "letterboxd";
+    if (hostname.includes("tiktok.com")) return "tiktok";
+    if (hostname.includes("reddit.com")) return "reddit";
+    if (hostname.includes("rottentomatoes.com")) return "rottentomatoes";
 
     return "generic";
   } catch {
@@ -80,13 +76,22 @@ export function extractYouTubeVideoId(url: string): string | null {
     if (urlObj.hostname.includes("youtube.com")) {
       return urlObj.searchParams.get("v");
     }
-  } catch {}
+  } catch { /* invalid URL — return null */ }
   return null;
 }
 
 export function extractImdbId(url: string): string | null {
   const match = url.match(/tt\d+/);
   return match ? match[0] : null;
+}
+
+export function shuffleArray<T>(array: T[]): T[] {
+  const arr = [...array];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
 }
 
 export function getMoodEmoji(mood: string): string {
@@ -123,53 +128,12 @@ export function getMoodEmoji(mood: string): string {
   return moods[mood.toLowerCase()] || "🎬";
 }
 
-
-/**
- * Normalizes shared URLs for duplicate detection without changing the saved source URL.
- * Removes fragments and common tracking parameters while preserving content identifiers.
- */
-export function normalizeBookmarkUrl(value: string): string {
-  const parsed = new URL(value.trim());
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error("Only HTTP and HTTPS links can be saved.");
-  }
-
-  parsed.hostname = parsed.hostname.toLowerCase().replace(/^(?:www\.|m\.)+/, "");
-  parsed.hash = "";
-
-  const trackingParams = [
-    "fbclid", "gclid", "igsh", "igshid", "si", "feature",
-    "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
-    "ref_src", "mc_cid", "mc_eid",
-  ];
-  const trackingParamSet = new Set(trackingParams);
-  [...parsed.searchParams.keys()].forEach((key) => {
-    const normalizedKey = key.toLowerCase();
-    if (trackingParamSet.has(normalizedKey) || normalizedKey.startsWith("utm_")) {
-      parsed.searchParams.delete(key);
+export function openSafe(url: string | null | undefined): void {
+  if (!url) return;
+  try {
+    const { protocol } = new URL(url);
+    if (protocol === "https:" || protocol === "http:") {
+      window.open(url, "_blank", "noopener,noreferrer");
     }
-  });
-
-  if (parsed.pathname.length > 1) parsed.pathname = parsed.pathname.replace(/\/+$/, "");
-  parsed.searchParams.sort();
-  return parsed.toString();
-}
-
-
-/** Extracts the first HTTP(S) URL from Android share payload fields. */
-export function extractSharedUrl(urlValue?: string | null, textValue?: string | null): string | null {
-  const urlPattern = /https?:\/\/[^\s<>"']+/i;
-  const candidates = [urlValue?.trim(), urlValue?.match(urlPattern)?.[0], textValue?.match(urlPattern)?.[0]];
-
-  for (const rawCandidate of candidates) {
-    const candidate = rawCandidate?.replace(/[),.;!?]+$/, "");
-    if (!candidate) continue;
-    try {
-      const parsed = new URL(candidate);
-      if (parsed.protocol === "http:" || parsed.protocol === "https:") return parsed.toString();
-    } catch {
-      // Try the next available shared field.
-    }
-  }
-  return null;
+  } catch { /* invalid URL — do nothing */ }
 }

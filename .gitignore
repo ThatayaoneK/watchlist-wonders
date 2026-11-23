@@ -7,7 +7,12 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
+node_modules/
+.expo/
+.npm-cache/
+.npm/
+.yarn/cache/
+.pnpm-store/
 dist
 dist-ssr
 *.local
@@ -24,3 +29,8 @@ dist-ssr
 *.sln
 *.sw?
 .env
+output/
+dst/
+.firebase/
+vite.config.ts.timestamp-*.mjs
+watch-wonders-firebase-adminsdk-fbsvc-f217482899.json

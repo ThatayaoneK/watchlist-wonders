@@ -47,8 +47,6 @@ async function withRetry<T>(
   operation: string,
   onError?: (error: EnrichmentError, attempt: number) => void,
 ): Promise<T | null> {
-  let lastError: EnrichmentError | null = null;
-
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       return await fn();
@@ -75,8 +73,6 @@ async function withRetry<T>(
         enrichmentError.message = 'Invalid API response format';
         enrichmentError.retryable = false;
       }
-
-      lastError = enrichmentError;
 
       if (onError) {
         onError(enrichmentError, attempt);
